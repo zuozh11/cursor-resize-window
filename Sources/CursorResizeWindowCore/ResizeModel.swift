@@ -30,8 +30,6 @@ struct ResizeDirection: OptionSet, Equatable {
 }
 
 enum ResizeModel {
-    static let throttleNanoseconds: UInt64 = 67_670_000
-
     static func resize(frame: CGRect, direction: ResizeDirection, dx: CGFloat, dy: CGFloat) -> CGRect {
         let xModifier: CGFloat
         if direction.contains(.left) {

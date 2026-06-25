@@ -12,4 +12,4 @@ This project implements that as a standalone macOS utility with:
 - `AXUIElementCopyElementAtPosition` to find the Accessibility element under the pointer.
 - `kAXPositionAttribute` and `kAXSizeAttribute` updates to resize the enclosing window.
 
-The resize model mirrors yabai's floating-window path: lock the handle direction at mouse-down time, apply incremental deltas against the current frame, clamp width and height to at least `1`, and throttle resize updates to roughly `67.67ms`.
+The resize model mirrors yabai's floating-window path: lock the handle direction at mouse-down time, apply incremental deltas against the current frame, and clamp width and height to at least `1`. Drag events are coalesced so the event tap stays responsive while AX resize work applies the latest pointer position.
