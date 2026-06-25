@@ -26,19 +26,19 @@ Then hold `ctrl`, left-click a window, and drag to resize it.
 Start now and automatically run at login:
 
 ```sh
-brew services start cursor-resize-window
+brew services start zuozh11/tap/cursor-resize-window
 ```
 
 Stop and disable automatic login startup:
 
 ```sh
-brew services stop cursor-resize-window
+brew services stop zuozh11/tap/cursor-resize-window
 ```
 
 Restart after upgrading:
 
 ```sh
-brew services restart cursor-resize-window
+brew services restart zuozh11/tap/cursor-resize-window
 ```
 
 Check service state:
