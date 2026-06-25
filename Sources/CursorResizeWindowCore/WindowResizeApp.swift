@@ -20,8 +20,6 @@ public final class WindowResizeApp: @unchecked Sendable {
     private var eventTap: CFMachPort?
     private let frameApplier = AXFrameApplier()
     private var dragState: DragState?
-    private var pendingDragPoint: CGPoint?
-    private var resizeScheduled = false
     private var consumedMouseDown: CGEvent?
     private var dragDetected = false
 
@@ -85,7 +83,7 @@ public final class WindowResizeApp: @unchecked Sendable {
                 return Unmanaged.passUnretained(event)
             }
             dragDetected = true
-            queueResize(to: event.location)
+            applyResize(to: event.location)
             return nil
         case .leftMouseUp:
             guard dragState != nil else {
@@ -96,12 +94,9 @@ public final class WindowResizeApp: @unchecked Sendable {
                 event.tapPostEvent(proxy)
             } else {
                 applyResize(to: event.location)
-                frameApplier.flush()
             }
             frameApplier.endDrag()
             dragState = nil
-            pendingDragPoint = nil
-            resizeScheduled = false
             consumedMouseDown = nil
             dragDetected = false
             return nil
@@ -126,34 +121,6 @@ public final class WindowResizeApp: @unchecked Sendable {
         )
         frameApplier.beginDrag(for: window)
         return true
-    }
-
-    private func queueResize(to point: CGPoint) {
-        pendingDragPoint = point
-
-        guard !resizeScheduled else {
-            return
-        }
-
-        resizeScheduled = true
-        DispatchQueue.main.async { [weak self] in
-            self?.flushPendingResize()
-        }
-    }
-
-    private func flushPendingResize() {
-        resizeScheduled = false
-
-        guard let point = pendingDragPoint else {
-            return
-        }
-        pendingDragPoint = nil
-        applyResize(to: point)
-
-        if let latestPoint = pendingDragPoint {
-            pendingDragPoint = nil
-            queueResize(to: latestPoint)
-        }
     }
 
     private func applyResize(to point: CGPoint) {
@@ -289,12 +256,14 @@ private final class AXFrameApplier: @unchecked Sendable {
         }
         enhancedUISession = nil
 
-        if session.shouldRestore {
-            AXUIElementSetAttributeValue(
-                session.application,
-                "AXEnhancedUserInterface" as CFString,
-                kCFBooleanTrue
-            )
+        queue.async {
+            if session.shouldRestore {
+                AXUIElementSetAttributeValue(
+                    session.application,
+                    "AXEnhancedUserInterface" as CFString,
+                    kCFBooleanTrue
+                )
+            }
         }
     }
 
@@ -312,10 +281,6 @@ private final class AXFrameApplier: @unchecked Sendable {
                 self?.drain()
             }
         }
-    }
-
-    func flush() {
-        queue.sync {}
     }
 
     private func drain() {
