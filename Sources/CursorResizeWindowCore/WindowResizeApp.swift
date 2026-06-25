@@ -57,7 +57,7 @@ public final class WindowResizeApp {
         CFRunLoopAddSource(CFRunLoopGetCurrent(), source, .commonModes)
         CGEvent.tapEnable(tap: tap, enable: true)
 
-        print("cursor-resize-window: running with modifier=ctrl")
+        print("cursor-resize-window: running with ctrl")
         CFRunLoopRun()
     }
 
@@ -71,7 +71,7 @@ public final class WindowResizeApp {
 
         switch type {
         case .leftMouseDown:
-            guard hasOnlyControlModifier(event.flags), beginDrag(at: event.location) else {
+            guard hasOnlyControlKey(event.flags), beginDrag(at: event.location) else {
                 return Unmanaged.passUnretained(event)
             }
             dragDetected = false
@@ -239,9 +239,9 @@ private struct DragState {
     let lastResizeTime: UInt64
 }
 
-private func hasOnlyControlModifier(_ flags: CGEventFlags) -> Bool {
-    let modifierMask: CGEventFlags = [.maskControl, .maskCommand, .maskAlternate, .maskShift, .maskSecondaryFn]
-    return flags.intersection(modifierMask) == .maskControl
+private func hasOnlyControlKey(_ flags: CGEventFlags) -> Bool {
+    let keyMask: CGEventFlags = [.maskControl, .maskCommand, .maskAlternate, .maskShift, .maskSecondaryFn]
+    return flags.intersection(keyMask) == .maskControl
 }
 
 private func eventCallback(

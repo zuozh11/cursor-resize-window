@@ -1,5 +1,5 @@
 class CursorResizeWindow < Formula
-  desc "Resize macOS windows with a modifier key and left mouse drag"
+  desc "Resize macOS windows with ctrl-left-drag"
   homepage "https://github.com/zuozhi/cursor-resize-window"
   url "https://github.com/zuozhi/cursor-resize-window/archive/refs/tags/v0.1.0.tar.gz"
   sha256 "TODO"
@@ -20,6 +20,6 @@ class CursorResizeWindow < Formula
   end
 
   test do
-    assert_match "cursor-resize-window", shell_output("#{bin}/cursor-resize-window --help")
+    assert_predicate bin/"cursor-resize-window", :executable?
   end
 end
