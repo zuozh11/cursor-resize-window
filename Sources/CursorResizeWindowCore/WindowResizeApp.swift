@@ -98,6 +98,7 @@ public final class WindowResizeApp: @unchecked Sendable {
                 applyResize(to: event.location)
                 frameApplier.flush()
             }
+            frameApplier.endDrag()
             dragState = nil
             pendingDragPoint = nil
             resizeScheduled = false
@@ -123,6 +124,7 @@ public final class WindowResizeApp: @unchecked Sendable {
             frame: frame,
             direction: ResizeDirection.from(point: point, frame: frame)
         )
+        frameApplier.beginDrag(for: window)
         return true
     }
 
@@ -264,6 +266,37 @@ private final class AXFrameApplier: @unchecked Sendable {
     private let lock = NSLock()
     private var pendingUpdate: FrameUpdate?
     private var applying = false
+    private var enhancedUISession: EnhancedUISession?
+
+    func beginDrag(for window: AXUIElement) {
+        guard let application = applicationElement(for: window) else {
+            enhancedUISession = nil
+            return
+        }
+
+        let attribute = "AXEnhancedUserInterface" as CFString
+        let shouldRestore = boolAttribute(application, attribute)
+        enhancedUISession = EnhancedUISession(application: application, shouldRestore: shouldRestore)
+
+        if shouldRestore {
+            AXUIElementSetAttributeValue(application, attribute, kCFBooleanFalse)
+        }
+    }
+
+    func endDrag() {
+        guard let session = enhancedUISession else {
+            return
+        }
+        enhancedUISession = nil
+
+        if session.shouldRestore {
+            AXUIElementSetAttributeValue(
+                session.application,
+                "AXEnhancedUserInterface" as CFString,
+                kCFBooleanTrue
+            )
+        }
+    }
 
     func enqueue(window: AXUIElement, frame: CGRect, previousFrame: CGRect) {
         lock.lock()
@@ -301,9 +334,7 @@ private final class AXFrameApplier: @unchecked Sendable {
     }
 
     private func apply(_ update: FrameUpdate) {
-        withEnhancedUserInterfaceDisabled(for: update.window) {
-            set(frame: update.frame, previousFrame: update.previousFrame, for: update.window)
-        }
+        set(frame: update.frame, previousFrame: update.previousFrame, for: update.window)
     }
 
     private func set(frame: CGRect, previousFrame: CGRect, for element: AXUIElement) {
@@ -321,26 +352,6 @@ private final class AXFrameApplier: @unchecked Sendable {
         }
 
         AXUIElementSetAttributeValue(element, kAXSizeAttribute as CFString, sizeValue)
-    }
-
-    private func withEnhancedUserInterfaceDisabled(for window: AXUIElement, _ work: () -> Void) {
-        guard let application = applicationElement(for: window) else {
-            work()
-            return
-        }
-
-        let attribute = "AXEnhancedUserInterface" as CFString
-        let wasEnabled = boolAttribute(application, attribute)
-
-        if wasEnabled {
-            AXUIElementSetAttributeValue(application, attribute, kCFBooleanFalse)
-        }
-
-        work()
-
-        if wasEnabled {
-            AXUIElementSetAttributeValue(application, attribute, kCFBooleanTrue)
-        }
     }
 
     private func applicationElement(for window: AXUIElement) -> AXUIElement? {
@@ -362,6 +373,11 @@ private final class AXFrameApplier: @unchecked Sendable {
 
         return CFBooleanGetValue((value as! CFBoolean))
     }
+}
+
+private struct EnhancedUISession {
+    let application: AXUIElement
+    let shouldRestore: Bool
 }
 
 private func hasOnlyControlKey(_ flags: CGEventFlags) -> Bool {
