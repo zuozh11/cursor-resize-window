@@ -1,0 +1,10 @@
+.DS_Store
+/.agents/
+/.build/
+/.swiftpm/
+/DerivedData/
+skills-lock.json
+*.xcodeproj
+*.xcworkspace
+xcuserdata/
+*.log
