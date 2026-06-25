@@ -17,13 +17,12 @@ public enum RuntimeError: Error, CustomStringConvertible {
 }
 
 public final class WindowResizeApp {
-    private let config: AppConfig
     private var eventTap: CFMachPort?
     private var dragState: DragState?
+    private var consumedMouseDown: CGEvent?
+    private var dragDetected = false
 
-    public init(config: AppConfig) {
-        self.config = config
-    }
+    public init() {}
 
     public func run() throws {
         let promptOptions = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
@@ -43,7 +42,7 @@ public final class WindowResizeApp {
 
         let userInfo = UnsafeMutableRawPointer(Unmanaged.passUnretained(self).toOpaque())
         guard let tap = CGEvent.tapCreate(
-            tap: .cgSessionEventTap,
+            tap: .cghidEventTap,
             place: .headInsertEventTap,
             options: .defaultTap,
             eventsOfInterest: eventMask,
@@ -58,11 +57,11 @@ public final class WindowResizeApp {
         CFRunLoopAddSource(CFRunLoopGetCurrent(), source, .commonModes)
         CGEvent.tapEnable(tap: tap, enable: true)
 
-        print("cursor-resize-window: running with modifier=\(config.modifier.rawValue)")
+        print("cursor-resize-window: running with modifier=ctrl")
         CFRunLoopRun()
     }
 
-    fileprivate func handle(_ type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
+    fileprivate func handle(_ type: CGEventType, event: CGEvent, proxy: CGEventTapProxy) -> Unmanaged<CGEvent>? {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
             if let eventTap {
                 CGEvent.tapEnable(tap: eventTap, enable: true)
@@ -72,21 +71,30 @@ public final class WindowResizeApp {
 
         switch type {
         case .leftMouseDown:
-            guard event.flags.contains(config.modifier.eventFlag), beginDrag(at: event.location) else {
+            guard hasOnlyControlModifier(event.flags), beginDrag(at: event.location) else {
                 return Unmanaged.passUnretained(event)
             }
+            dragDetected = false
+            consumedMouseDown = event.copy()
             return nil
         case .leftMouseDragged:
             guard dragState != nil else {
                 return Unmanaged.passUnretained(event)
             }
+            dragDetected = true
             updateDrag(to: event.location)
             return nil
         case .leftMouseUp:
             guard dragState != nil else {
                 return Unmanaged.passUnretained(event)
             }
+            if !dragDetected, let consumedMouseDown {
+                consumedMouseDown.tapPostEvent(proxy)
+                event.tapPostEvent(proxy)
+            }
             dragState = nil
+            consumedMouseDown = nil
+            dragDetected = false
             return nil
         default:
             return Unmanaged.passUnretained(event)
@@ -101,13 +109,12 @@ public final class WindowResizeApp {
             return false
         }
 
-        let midpointX = frame.midX
-        let midpointY = frame.midY
         dragState = DragState(
             window: window,
-            startMouse: point,
-            startFrame: frame,
-            anchor: ResizeAnchor(resizeLeft: point.x < midpointX, resizeTop: point.y < midpointY)
+            downLocation: point,
+            frame: frame,
+            direction: ResizeDirection.from(point: point, frame: frame),
+            lastResizeTime: 0
         )
         return true
     }
@@ -117,31 +124,23 @@ public final class WindowResizeApp {
             return
         }
 
-        let dx = point.x - dragState.startMouse.x
-        let dy = point.y - dragState.startMouse.y
-        var frame = dragState.startFrame
-
-        if dragState.anchor.resizeLeft {
-            frame.origin.x = min(
-                dragState.startFrame.maxX - CGFloat(config.minimumWidth),
-                dragState.startFrame.origin.x + dx
-            )
-            frame.size.width = dragState.startFrame.maxX - frame.origin.x
-        } else {
-            frame.size.width = max(CGFloat(config.minimumWidth), dragState.startFrame.width + dx)
+        let now = DispatchTime.now().uptimeNanoseconds
+        guard now - dragState.lastResizeTime >= ResizeModel.throttleNanoseconds else {
+            return
         }
 
-        if dragState.anchor.resizeTop {
-            frame.origin.y = min(
-                dragState.startFrame.maxY - CGFloat(config.minimumHeight),
-                dragState.startFrame.origin.y + dy
-            )
-            frame.size.height = dragState.startFrame.maxY - frame.origin.y
-        } else {
-            frame.size.height = max(CGFloat(config.minimumHeight), dragState.startFrame.height + dy)
-        }
+        let dx = CGFloat(Int(point.x - dragState.downLocation.x))
+        let dy = CGFloat(Int(point.y - dragState.downLocation.y))
+        let frame = ResizeModel.resize(frame: dragState.frame, direction: dragState.direction, dx: dx, dy: dy)
 
         set(frame: frame, for: dragState.window)
+        self.dragState = DragState(
+            window: dragState.window,
+            downLocation: point,
+            frame: frame,
+            direction: dragState.direction,
+            lastResizeTime: now
+        )
     }
 
     private func windowElement(at point: CGPoint) -> AXUIElement? {
@@ -234,18 +233,19 @@ public final class WindowResizeApp {
 
 private struct DragState {
     let window: AXUIElement
-    let startMouse: CGPoint
-    let startFrame: CGRect
-    let anchor: ResizeAnchor
+    let downLocation: CGPoint
+    let frame: CGRect
+    let direction: ResizeDirection
+    let lastResizeTime: UInt64
 }
 
-private struct ResizeAnchor {
-    let resizeLeft: Bool
-    let resizeTop: Bool
+private func hasOnlyControlModifier(_ flags: CGEventFlags) -> Bool {
+    let modifierMask: CGEventFlags = [.maskControl, .maskCommand, .maskAlternate, .maskShift, .maskSecondaryFn]
+    return flags.intersection(modifierMask) == .maskControl
 }
 
 private func eventCallback(
-    proxy _: CGEventTapProxy,
+    proxy: CGEventTapProxy,
     type: CGEventType,
     event: CGEvent,
     refcon: UnsafeMutableRawPointer?
@@ -255,5 +255,5 @@ private func eventCallback(
     }
 
     let app = Unmanaged<WindowResizeApp>.fromOpaque(refcon).takeUnretainedValue()
-    return app.handle(type, event: event)
+    return app.handle(type, event: event, proxy: proxy)
 }

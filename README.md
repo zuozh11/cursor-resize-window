@@ -1,28 +1,16 @@
 # cursor-resize-window
 
-`cursor-resize-window` is a small macOS utility that recreates yabai-style window resizing without running yabai itself. Hold the configured modifier key, left-click anywhere in a window, and drag to resize from the nearest quadrant. The default modifier is `ctrl`.
+`cursor-resize-window` is a small macOS utility that recreates yabai-style window resizing without running yabai itself. Hold `ctrl`, left-click anywhere in a window, and drag to resize from the nearest quadrant.
 
 ## Build and Run
 
 ```sh
 swift build
 swift test
-swift run cursor-resize-window --modifier ctrl
+swift run cursor-resize-window
 ```
 
 The app uses macOS Accessibility APIs and a global event tap. On first run, approve it in System Settings > Privacy & Security > Accessibility. If the event tap cannot be created, also check Input Monitoring permissions.
-
-## Configuration
-
-Create `~/.config/cursor-resize-window/config`:
-
-```ini
-modifier = ctrl
-min_width = 160
-min_height = 120
-```
-
-Supported modifiers: `ctrl`, `cmd`, `alt`, `shift`, `fn`.
 
 ## Homebrew
 

@@ -2,7 +2,7 @@
 
 The target behavior is the yabai-style mouse workflow:
 
-- Hold a configured modifier key.
+- Hold `ctrl`.
 - Press the left mouse button on a window.
 - Drag to resize the window from the quadrant where the drag started.
 
@@ -12,4 +12,4 @@ This project implements that as a standalone macOS utility with:
 - `AXUIElementCopyElementAtPosition` to find the Accessibility element under the pointer.
 - `kAXPositionAttribute` and `kAXSizeAttribute` updates to resize the enclosing window.
 
-The initial behavior deliberately locks the resize quadrant at mouse-down time. That avoids direction switching during a drag and keeps the interaction predictable.
+The resize model mirrors yabai's floating-window path: lock the handle direction at mouse-down time, apply incremental deltas against the current frame, clamp width and height to at least `1`, and throttle resize updates to roughly `67.67ms`.

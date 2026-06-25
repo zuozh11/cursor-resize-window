@@ -2,14 +2,14 @@ import CursorResizeWindowCore
 import Foundation
 
 do {
-    let config = try AppConfig.load(arguments: CommandLine.arguments)
+    let options = try CommandLineOptions.parse(arguments: CommandLine.arguments)
 
-    if config.showHelp {
-        print(AppConfig.helpText)
+    if options.showHelp {
+        print(CommandLineOptions.helpText)
         exit(EXIT_SUCCESS)
     }
 
-    try WindowResizeApp(config: config).run()
+    try WindowResizeApp().run()
 } catch {
     fputs("cursor-resize-window: \(error)\n", stderr)
     exit(EXIT_FAILURE)
