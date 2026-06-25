@@ -1,8 +1,6 @@
 @preconcurrency import ApplicationServices
 @preconcurrency import CoreGraphics
-import Darwin
 import Foundation
-import os
 
 public enum RuntimeError: Error, CustomStringConvertible {
     case accessibilityPermissionRequired
@@ -121,7 +119,7 @@ public final class WindowResizeApp: @unchecked Sendable {
             frame: frame,
             direction: ResizeDirection.from(point: point, frame: frame)
         )
-        frameApplier.beginDrag(for: window, initialFrame: frame)
+        frameApplier.beginDrag(for: window)
         return true
     }
 
@@ -130,25 +128,17 @@ public final class WindowResizeApp: @unchecked Sendable {
             return
         }
 
-        let dx = Int(point.x - dragState.downLocation.x)
-        let dy = Int(point.y - dragState.downLocation.y)
-        guard dx != 0 || dy != 0 else {
-            return
-        }
+        let dx = point.x - dragState.downLocation.x
+        let dy = point.y - dragState.downLocation.y
+        let frame = ResizeModel.resize(frame: dragState.frame, direction: dragState.direction, dx: dx, dy: dy)
 
-        let frame = ResizeModel.resize(
-            frame: dragState.frame,
-            direction: dragState.direction,
-            dx: CGFloat(dx),
-            dy: CGFloat(dy)
+        frameApplier.enqueue(window: dragState.window, frame: frame, previousFrame: dragState.frame)
+        self.dragState = DragState(
+            window: dragState.window,
+            downLocation: point,
+            frame: frame,
+            direction: dragState.direction
         )
-
-        if frame != dragState.frame {
-            frameApplier.enqueue(window: dragState.window, frame: frame)
-        }
-
-        dragState.downLocation = point
-        dragState.frame = frame
     }
 
     private func windowElement(at point: CGPoint) -> AXUIElement? {
@@ -225,57 +215,38 @@ public final class WindowResizeApp: @unchecked Sendable {
 
 }
 
-private final class DragState: @unchecked Sendable {
+private struct DragState {
     let window: AXUIElement
-    var downLocation: CGPoint
-    var frame: CGRect
+    let downLocation: CGPoint
+    let frame: CGRect
     let direction: ResizeDirection
-
-    init(window: AXUIElement, downLocation: CGPoint, frame: CGRect, direction: ResizeDirection) {
-        self.window = window
-        self.downLocation = downLocation
-        self.frame = frame
-        self.direction = direction
-    }
 }
 
 private struct FrameUpdate: @unchecked Sendable {
     let window: AXUIElement
     let frame: CGRect
-}
-
-private struct FrameApplierState {
-    var pendingUpdate: FrameUpdate?
-    var applying = false
+    let previousFrame: CGRect
 }
 
 private final class AXFrameApplier: @unchecked Sendable {
-    private static let frameIntervalNanoseconds: UInt64 = 8_333_333
-    private static let frameIntervalAbsoluteTime = nanosecondsToAbsoluteTime(frameIntervalNanoseconds)
-    private static let positionAttribute = kAXPositionAttribute as CFString
-    private static let sizeAttribute = kAXSizeAttribute as CFString
-    private static let enhancedUIAttribute = "AXEnhancedUserInterface" as CFString
-
     private let queue = DispatchQueue(label: "cursor-resize-window.ax-frame-applier", qos: .userInteractive)
-    private let state = OSAllocatedUnfairLock(initialState: FrameApplierState())
+    private let lock = NSLock()
+    private var pendingUpdate: FrameUpdate?
+    private var applying = false
     private var enhancedUISession: EnhancedUISession?
-    private var lastAppliedFrame: CGRect?
-    private var lastFrameStartTime: UInt64 = 0
 
-    func beginDrag(for window: AXUIElement, initialFrame: CGRect) {
-        lastAppliedFrame = initialFrame
-        lastFrameStartTime = 0
-
+    func beginDrag(for window: AXUIElement) {
         guard let application = applicationElement(for: window) else {
             enhancedUISession = nil
             return
         }
 
-        let shouldRestore = boolAttribute(application, Self.enhancedUIAttribute)
+        let attribute = "AXEnhancedUserInterface" as CFString
+        let shouldRestore = boolAttribute(application, attribute)
         enhancedUISession = EnhancedUISession(application: application, shouldRestore: shouldRestore)
 
         if shouldRestore {
-            AXUIElementSetAttributeValue(application, Self.enhancedUIAttribute, kCFBooleanFalse)
+            AXUIElementSetAttributeValue(application, attribute, kCFBooleanFalse)
         }
     }
 
@@ -289,24 +260,21 @@ private final class AXFrameApplier: @unchecked Sendable {
             if session.shouldRestore {
                 AXUIElementSetAttributeValue(
                     session.application,
-                    Self.enhancedUIAttribute,
+                    "AXEnhancedUserInterface" as CFString,
                     kCFBooleanTrue
                 )
             }
         }
     }
 
-    func enqueue(window: AXUIElement, frame: CGRect) {
-        let shouldStart = state.withLock { state in
-            state.pendingUpdate = FrameUpdate(window: window, frame: frame)
-
-            if state.applying {
-                return false
-            }
-
-            state.applying = true
-            return true
+    func enqueue(window: AXUIElement, frame: CGRect, previousFrame: CGRect) {
+        lock.lock()
+        pendingUpdate = FrameUpdate(window: window, frame: frame, previousFrame: previousFrame)
+        let shouldStart = !applying
+        if shouldStart {
+            applying = true
         }
+        lock.unlock()
 
         if shouldStart {
             queue.async { [weak self] in
@@ -317,95 +285,38 @@ private final class AXFrameApplier: @unchecked Sendable {
 
     private func drain() {
         while true {
-            guard let queuedUpdate = takePendingUpdateOrFinish() else {
+            lock.lock()
+            guard let update = pendingUpdate else {
+                applying = false
+                lock.unlock()
                 return
             }
+            pendingUpdate = nil
+            lock.unlock()
 
-            waitForNextFrame()
-            let update = takeLatestUpdate(replacing: queuedUpdate)
             apply(update)
         }
     }
 
-    private func takePendingUpdateOrFinish() -> FrameUpdate? {
-        state.withLock { state in
-            guard let update = state.pendingUpdate else {
-                state.applying = false
-                return nil
-            }
-
-            state.pendingUpdate = nil
-            return update
-        }
-    }
-
-    private func takeLatestUpdate(replacing queuedUpdate: FrameUpdate) -> FrameUpdate {
-        state.withLock { state in
-            guard let latestUpdate = state.pendingUpdate else {
-                return queuedUpdate
-            }
-
-            state.pendingUpdate = nil
-            return latestUpdate
-        }
-    }
-
-    private func set(_ update: FrameUpdate) {
-        let previousFrame = lastAppliedFrame
-        let shouldSetPosition: Bool
-        let shouldSetSize: Bool
-
-        if let previousFrame {
-            shouldSetPosition = previousFrame.origin != update.frame.origin
-            shouldSetSize = previousFrame.size != update.frame.size
-        } else {
-            shouldSetPosition = true
-            shouldSetSize = true
-        }
-
-        if shouldSetPosition {
-            var position = update.frame.origin
-            if let positionValue = AXValueCreate(.cgPoint, &position) {
-                AXUIElementSetAttributeValue(update.window, Self.positionAttribute, positionValue)
-            }
-        }
-
-        if shouldSetSize {
-            var size = update.frame.size
-            if let sizeValue = AXValueCreate(.cgSize, &size) {
-                AXUIElementSetAttributeValue(update.window, Self.sizeAttribute, sizeValue)
-            }
-        }
-
-        lastAppliedFrame = update.frame
-    }
-
     private func apply(_ update: FrameUpdate) {
-        lastFrameStartTime = mach_absolute_time()
-        set(update)
+        set(frame: update.frame, previousFrame: update.previousFrame, for: update.window)
     }
 
-    private func waitForNextFrame() {
-        guard lastFrameStartTime > 0 else {
+    private func set(frame: CGRect, previousFrame: CGRect, for element: AXUIElement) {
+        var size = frame.size
+
+        guard let sizeValue = AXValueCreate(.cgSize, &size) else {
             return
         }
 
-        let now = mach_absolute_time()
-        let nextFrameTime = lastFrameStartTime + Self.frameIntervalAbsoluteTime
-        guard now < nextFrameTime else {
-            return
+        if frame.origin != previousFrame.origin {
+            var position = frame.origin
+            if let positionValue = AXValueCreate(.cgPoint, &position) {
+                AXUIElementSetAttributeValue(element, kAXPositionAttribute as CFString, positionValue)
+            }
         }
 
-        mach_wait_until(nextFrameTime)
-    }
-
-    private static func nanosecondsToAbsoluteTime(_ nanoseconds: UInt64) -> UInt64 {
-        var timebase = mach_timebase_info_data_t()
-        mach_timebase_info(&timebase)
-
-        let numerator = nanoseconds * UInt64(timebase.denom)
-        let denominator = UInt64(timebase.numer)
-        return max(1, (numerator + denominator - 1) / denominator)
+        AXUIElementSetAttributeValue(element, kAXSizeAttribute as CFString, sizeValue)
     }
 
     private func applicationElement(for window: AXUIElement) -> AXUIElement? {
