@@ -155,13 +155,81 @@ public final class WindowResizeApp: @unchecked Sendable {
         let systemElement = AXUIElementCreateSystemWide()
         var element: AXUIElement?
 
-        guard AXUIElementCopyElementAtPosition(systemElement, Float(point.x), Float(point.y), &element) == .success,
-              let element
+        if AXUIElementCopyElementAtPosition(systemElement, Float(point.x), Float(point.y), &element) == .success,
+           let element,
+           let window = enclosingWindow(for: element)
+        {
+            return window
+        }
+
+        return windowFromWindowServer(at: point)
+    }
+
+    private func windowFromWindowServer(at point: CGPoint) -> AXUIElement? {
+        guard let pid = windowOwnerPIDFromWindowServer(at: point) else {
+            return nil
+        }
+
+        let application = AXUIElementCreateApplication(pid)
+        var windowsRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(application, kAXWindowsAttribute as CFString, &windowsRef) == .success,
+              let windows = windowsRef as? [AXUIElement]
         else {
             return nil
         }
 
-        return enclosingWindow(for: element)
+        return windows.first { window in
+            guard stringAttribute(window, kAXRoleAttribute) == kAXWindowRole as String,
+                  let frame = frame(of: window)
+            else {
+                return false
+            }
+
+            return frame.contains(point)
+        }
+    }
+
+    private func windowOwnerPIDFromWindowServer(at point: CGPoint) -> pid_t? {
+        guard let windowInfoList = CGWindowListCopyWindowInfo(
+            [.optionOnScreenOnly, .excludeDesktopElements],
+            kCGNullWindowID
+        ) as? [[String: Any]] else {
+            return nil
+        }
+
+        for windowInfo in windowInfoList {
+            guard windowLayer(windowInfo) == 0,
+                  let bounds = windowBounds(windowInfo),
+                  bounds.contains(point),
+                  let pid = windowOwnerPID(windowInfo)
+            else {
+                continue
+            }
+
+            return pid
+        }
+
+        return nil
+    }
+
+    private func windowLayer(_ windowInfo: [String: Any]) -> Int? {
+        windowInfo[kCGWindowLayer as String] as? Int
+    }
+
+    private func windowOwnerPID(_ windowInfo: [String: Any]) -> pid_t? {
+        guard let ownerPID = windowInfo[kCGWindowOwnerPID as String] as? pid_t else {
+            return nil
+        }
+
+        return ownerPID
+    }
+
+    private func windowBounds(_ windowInfo: [String: Any]) -> CGRect? {
+        guard let boundsDictionary = windowInfo[kCGWindowBounds as String] else {
+            return nil
+        }
+
+        return CGRect(dictionaryRepresentation: boundsDictionary as! CFDictionary)
     }
 
     private func enclosingWindow(for element: AXUIElement) -> AXUIElement? {
