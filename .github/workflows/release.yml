@@ -17,6 +17,13 @@ jobs:
         with:
           ref: main
 
+      - name: Check out Homebrew tap
+        uses: actions/checkout@v6
+        with:
+          repository: zuozh11/homebrew-tap
+          path: homebrew-tap
+          ssh-key: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
+
       - name: Update Homebrew formula
         env:
           VERSION: ${{ github.ref_name }}
@@ -33,6 +40,13 @@ jobs:
           git add Formula/cursor-resize-window.rb
           git commit -m "build: update formula to ${VERSION}"
           git push origin HEAD:main
+
+          cp Formula/cursor-resize-window.rb homebrew-tap/Formula/cursor-resize-window.rb
+          git -C homebrew-tap config user.name "github-actions[bot]"
+          git -C homebrew-tap config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C homebrew-tap add Formula/cursor-resize-window.rb
+          git -C homebrew-tap commit -m "build: update cursor-resize-window to ${VERSION}"
+          git -C homebrew-tap push origin HEAD:main
 
       - name: Create GitHub release
         env:
