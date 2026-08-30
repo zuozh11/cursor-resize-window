@@ -30,11 +30,7 @@ struct ResizeDirection: OptionSet, Equatable {
 }
 
 enum ResizeModel {
-    private static let axisSnapSlope: CGFloat = 0.25
-
     static func resize(frame: CGRect, direction: ResizeDirection, dx: CGFloat, dy: CGFloat) -> CGRect {
-        let (dx, dy) = snappedDelta(dx: dx, dy: dy)
-
         let xModifier: CGFloat
         if direction.contains(.left) {
             xModifier = -1
@@ -60,14 +56,33 @@ enum ResizeModel {
 
         return CGRect(x: x, y: y, width: width, height: height)
     }
+}
 
-    private static func snappedDelta(dx: CGFloat, dy: CGFloat) -> (CGFloat, CGFloat) {
+enum ResizeMotion {
+    case horizontal
+    case vertical
+    case diagonal
+
+    private static let axisSnapSlope: CGFloat = 0.5
+
+    static func from(dx: CGFloat, dy: CGFloat) -> ResizeMotion {
         if abs(dy) <= abs(dx) * axisSnapSlope {
-            return (dx, 0)
+            return .horizontal
         }
         if abs(dx) <= abs(dy) * axisSnapSlope {
-            return (0, dy)
+            return .vertical
         }
-        return (dx, dy)
+        return .diagonal
+    }
+
+    func constrain(dx: CGFloat, dy: CGFloat) -> (CGFloat, CGFloat) {
+        switch self {
+        case .horizontal:
+            return (dx, 0)
+        case .vertical:
+            return (0, dy)
+        case .diagonal:
+            return (dx, dy)
+        }
     }
 }
