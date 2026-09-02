@@ -103,7 +103,8 @@ enum ResizeModel {
 }
 
 struct NativeResizeMapping: Equatable {
-    private static let edgeInset: CGFloat = 5
+    private static let edgeInset: CGFloat = 2
+    private static let cornerInset: CGFloat = 5
 
     let anchor: CGPoint
     private let pointer: CGPoint
@@ -111,28 +112,35 @@ struct NativeResizeMapping: Equatable {
 
     init(pointer: CGPoint, frame: CGRect, target: ResizeTarget) {
         self.pointer = pointer
-        let left = frame.minX + Self.edgeInset
-        let right = frame.maxX - Self.edgeInset
-        let top = frame.minY + Self.edgeInset
-        let bottom = frame.maxY - Self.edgeInset
-
         switch target {
         case .left:
-            anchor = CGPoint(x: left, y: pointer.y)
+            anchor = CGPoint(x: frame.minX + Self.edgeInset, y: pointer.y)
         case .right:
-            anchor = CGPoint(x: right, y: pointer.y)
+            anchor = CGPoint(x: frame.maxX - Self.edgeInset, y: pointer.y)
         case .top:
-            anchor = CGPoint(x: pointer.x, y: top)
+            anchor = CGPoint(x: pointer.x, y: frame.minY + Self.edgeInset)
         case .bottom:
-            anchor = CGPoint(x: pointer.x, y: bottom)
+            anchor = CGPoint(x: pointer.x, y: frame.maxY - Self.edgeInset)
         case .leftTop:
-            anchor = CGPoint(x: left, y: top)
+            anchor = CGPoint(
+                x: frame.minX + Self.cornerInset,
+                y: frame.minY + Self.cornerInset
+            )
         case .rightTop:
-            anchor = CGPoint(x: right, y: top)
+            anchor = CGPoint(
+                x: frame.maxX - Self.cornerInset,
+                y: frame.minY + Self.cornerInset
+            )
         case .leftBottom:
-            anchor = CGPoint(x: left, y: bottom)
+            anchor = CGPoint(
+                x: frame.minX + Self.cornerInset,
+                y: frame.maxY - Self.cornerInset
+            )
         case .rightBottom:
-            anchor = CGPoint(x: right, y: bottom)
+            anchor = CGPoint(
+                x: frame.maxX - Self.cornerInset,
+                y: frame.maxY - Self.cornerInset
+            )
         }
         offset = CGPoint(x: anchor.x - pointer.x, y: anchor.y - pointer.y)
     }

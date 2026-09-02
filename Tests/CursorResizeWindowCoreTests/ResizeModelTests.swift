@@ -61,10 +61,10 @@ final class ResizeModelTests: XCTestCase {
     func testMapsEveryTargetToNativeAnchor() {
         let pointer = CGPoint(x: 250, y: 350)
         let expected: [ResizeTarget: CGPoint] = [
-            .left: CGPoint(x: 105, y: 350),
-            .right: CGPoint(x: 395, y: 350),
-            .top: CGPoint(x: 250, y: 205),
-            .bottom: CGPoint(x: 250, y: 495),
+            .left: CGPoint(x: 102, y: 350),
+            .right: CGPoint(x: 398, y: 350),
+            .top: CGPoint(x: 250, y: 202),
+            .bottom: CGPoint(x: 250, y: 498),
             .leftTop: CGPoint(x: 105, y: 205),
             .rightTop: CGPoint(x: 395, y: 205),
             .leftBottom: CGPoint(x: 105, y: 495),
@@ -115,7 +115,7 @@ final class ResizeModelTests: XCTestCase {
     func testTranslatesNativeResizeEventsByPointerToAnchorOffset() {
         let mapping = NativeResizeMapping(pointer: CGPoint(x: 150, y: 350), frame: frame, target: .left)
 
-        XCTAssertEqual(mapping.translate(CGPoint(x: 170, y: 380)), CGPoint(x: 125, y: 380))
+        XCTAssertEqual(mapping.translate(CGPoint(x: 170, y: 380)), CGPoint(x: 122, y: 380))
     }
 
     func testUsesNativeResizeWhenPointerAndAnchorAreOnSameDisplay() {
