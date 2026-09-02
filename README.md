@@ -21,6 +21,14 @@ cursor-resize-window
 
 Then hold `ctrl`, left-click a window, and drag to resize it.
 
+By default, the utility updates the window frame through the Accessibility API. To use the optional native mode instead:
+
+```sh
+cursor-resize-window --native
+```
+
+Native mode redirects the drag to the nearest macOS resize corner so Window Server performs the resize. It still uses `ctrl` + left-drag and Accessibility for locating and raising the target window, but it does not apply frame updates through Accessibility while dragging.
+
 ## Service Commands
 
 Start now and automatically run at login:

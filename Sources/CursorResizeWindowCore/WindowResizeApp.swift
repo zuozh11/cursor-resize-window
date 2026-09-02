@@ -18,6 +18,11 @@ public enum RuntimeError: Error, CustomStringConvertible {
     }
 }
 
+public enum WindowResizeMode: String {
+    case accessibility
+    case native
+}
+
 public final class WindowResizeApp: @unchecked Sendable {
     private static let directionSampleDistance: CGFloat = 8
 
@@ -26,8 +31,12 @@ public final class WindowResizeApp: @unchecked Sendable {
     private var dragState: DragState?
     private var consumedMouseDown: CGEvent?
     private var dragDetected = false
+    private var nativeDragState: NativeDragState?
+    private let mode: WindowResizeMode
 
-    public init() {}
+    public init(mode: WindowResizeMode = .accessibility) {
+        self.mode = mode
+    }
 
     public func run() throws {
         let promptOptions = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
@@ -62,7 +71,7 @@ public final class WindowResizeApp: @unchecked Sendable {
         CFRunLoopAddSource(CFRunLoopGetCurrent(), source, .commonModes)
         CGEvent.tapEnable(tap: tap, enable: true)
 
-        print("cursor-resize-window: running with ctrl")
+        print("cursor-resize-window: running with ctrl (\(mode.rawValue) mode)")
         CFRunLoopRun()
     }
 
@@ -83,26 +92,32 @@ public final class WindowResizeApp: @unchecked Sendable {
             consumedMouseDown = event.copy()
             return nil
         case .leftMouseDragged:
-            guard dragState != nil else {
+            guard dragState != nil || nativeDragState != nil else {
                 return Unmanaged.passUnretained(event)
             }
             dragDetected = true
-            applyResize(to: event.location)
+            if mode == .native {
+                return applyNativeResize(to: event)
+            }
+            applyAccessibilityResize(to: event.location)
             return nil
         case .leftMouseUp:
-            guard dragState != nil else {
+            guard dragState != nil || nativeDragState != nil else {
                 return Unmanaged.passUnretained(event)
             }
             if !dragDetected, let consumedMouseDown {
                 consumedMouseDown.tapPostEvent(proxy)
                 event.tapPostEvent(proxy)
-            } else {
-                applyResize(to: event.location)
+                finishDrag()
+                return nil
             }
-            frameApplier.endDrag()
-            dragState = nil
-            consumedMouseDown = nil
-            dragDetected = false
+            if mode == .native {
+                let rewrittenEvent = finishNativeResize(with: event)
+                finishDrag()
+                return rewrittenEvent
+            }
+            applyAccessibilityResize(to: event.location)
+            finishDrag()
             return nil
         default:
             return Unmanaged.passUnretained(event)
@@ -117,18 +132,23 @@ public final class WindowResizeApp: @unchecked Sendable {
             return false
         }
 
-        dragState = DragState(
-            window: window,
-            downLocation: point,
-            directionSampleLocation: point,
-            frame: frame,
-            direction: ResizeDirection.from(point: point, frame: frame)
-        )
-        frameApplier.beginDrag(for: window, initialFrame: frame)
+        if mode == .native {
+            nativeDragState = NativeDragState(mapping: NativeResizeMapping(pointer: point, frame: frame))
+            AXUIElementPerformAction(window, kAXRaiseAction as CFString)
+        } else {
+            dragState = DragState(
+                window: window,
+                downLocation: point,
+                directionSampleLocation: point,
+                frame: frame,
+                direction: ResizeDirection.from(point: point, frame: frame)
+            )
+            frameApplier.beginDrag(for: window, initialFrame: frame)
+        }
         return true
     }
 
-    private func applyResize(to point: CGPoint) {
+    private func applyAccessibilityResize(to point: CGPoint) {
         guard let dragState else {
             return
         }
@@ -170,6 +190,42 @@ public final class WindowResizeApp: @unchecked Sendable {
 
         dragState.downLocation = point
         dragState.frame = frame
+    }
+
+    private func applyNativeResize(to event: CGEvent) -> Unmanaged<CGEvent>? {
+        guard let nativeDragState else {
+            return Unmanaged.passUnretained(event)
+        }
+
+        event.flags.remove(.maskControl)
+        if nativeDragState.needsMouseDown {
+            nativeDragState.needsMouseDown = false
+            event.type = .leftMouseDown
+            event.location = nativeDragState.mapping.anchor
+        } else {
+            event.location = nativeDragState.mapping.translate(event.location)
+        }
+        return Unmanaged.passUnretained(event)
+    }
+
+    private func finishNativeResize(with event: CGEvent) -> Unmanaged<CGEvent>? {
+        guard let nativeDragState else {
+            return Unmanaged.passUnretained(event)
+        }
+
+        event.flags.remove(.maskControl)
+        event.location = nativeDragState.mapping.translate(event.location)
+        return Unmanaged.passUnretained(event)
+    }
+
+    private func finishDrag() {
+        if dragState != nil {
+            frameApplier.endDrag()
+        }
+        dragState = nil
+        nativeDragState = nil
+        consumedMouseDown = nil
+        dragDetected = false
     }
 
     private func windowElement(at point: CGPoint) -> AXUIElement? {
@@ -312,6 +368,15 @@ public final class WindowResizeApp: @unchecked Sendable {
         return CGRect(origin: position, size: size)
     }
 
+}
+
+private final class NativeDragState {
+    let mapping: NativeResizeMapping
+    var needsMouseDown = true
+
+    init(mapping: NativeResizeMapping) {
+        self.mapping = mapping
+    }
 }
 
 private final class DragState: @unchecked Sendable {
