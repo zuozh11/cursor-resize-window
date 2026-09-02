@@ -75,6 +75,10 @@ struct NativeResizeMapping: Equatable {
     func translate(_ point: CGPoint) -> CGPoint {
         CGPoint(x: point.x + offset.x, y: point.y + offset.y)
     }
+
+    func isClickable(in bounds: [CGRect]) -> Bool {
+        bounds.contains { $0.contains(anchor) }
+    }
 }
 
 enum ResizeMotion {

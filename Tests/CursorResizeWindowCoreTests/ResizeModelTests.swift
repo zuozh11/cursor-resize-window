@@ -52,4 +52,22 @@ final class ResizeModelTests: XCTestCase {
 
         XCTAssertEqual(mapping.translate(CGPoint(x: 170, y: 280)), CGPoint(x: 125, y: 235))
     }
+
+    func testUsesNativeResizeWhenCornerIsInsideClickableDisplayBounds() {
+        let mapping = NativeResizeMapping(
+            pointer: CGPoint(x: 150, y: 250),
+            frame: CGRect(x: 100, y: 200, width: 400, height: 300)
+        )
+
+        XCTAssertTrue(mapping.isClickable(in: [CGRect(x: 0, y: 0, width: 1440, height: 900)]))
+    }
+
+    func testFallsBackWhenNativeResizeCornerIsOutsideClickableDisplayBounds() {
+        let mapping = NativeResizeMapping(
+            pointer: CGPoint(x: -50, y: 250),
+            frame: CGRect(x: -100, y: 200, width: 400, height: 300)
+        )
+
+        XCTAssertFalse(mapping.isClickable(in: [CGRect(x: 0, y: 0, width: 1440, height: 900)]))
+    }
 }
