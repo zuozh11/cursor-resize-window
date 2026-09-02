@@ -19,8 +19,6 @@ public enum RuntimeError: Error, CustomStringConvertible {
 }
 
 public final class WindowResizeApp: @unchecked Sendable {
-    private static let directionSampleDistance: CGFloat = 8
-
     private var eventTap: CFMachPort?
     private let frameApplier = AXFrameApplier()
     private var dragState: DragState?
@@ -124,7 +122,8 @@ public final class WindowResizeApp: @unchecked Sendable {
             return false
         }
 
-        let nativeMapping = NativeResizeMapping(pointer: point, frame: frame)
+        let target = ResizeTarget.from(point: point, frame: frame)
+        let nativeMapping = NativeResizeMapping(pointer: point, frame: frame, target: target)
         if nativeMapping.isClickable(in: activeDisplayBounds()) {
             nativeDragState = NativeDragState(mapping: nativeMapping)
             AXUIElementPerformAction(window, kAXRaiseAction as CFString)
@@ -132,9 +131,8 @@ public final class WindowResizeApp: @unchecked Sendable {
             dragState = DragState(
                 window: window,
                 downLocation: point,
-                directionSampleLocation: point,
                 frame: frame,
-                direction: ResizeDirection.from(point: point, frame: frame)
+                direction: target.direction
             )
             frameApplier.beginDrag(for: window, initialFrame: frame)
         }
@@ -160,29 +158,11 @@ public final class WindowResizeApp: @unchecked Sendable {
             return
         }
 
-        var dx = point.x - dragState.downLocation.x
-        var dy = point.y - dragState.downLocation.y
+        let dx = point.x - dragState.downLocation.x
+        let dy = point.y - dragState.downLocation.y
         guard dx != 0 || dy != 0 else {
             return
         }
-
-        let sampleDx = point.x - dragState.directionSampleLocation.x
-        let sampleDy = point.y - dragState.directionSampleLocation.y
-        if dragState.motion == nil {
-            guard max(abs(sampleDx), abs(sampleDy)) >= Self.directionSampleDistance else {
-                return
-            }
-        }
-
-        if max(abs(sampleDx), abs(sampleDy)) >= Self.directionSampleDistance {
-            dragState.motion = ResizeMotion.from(dx: sampleDx, dy: sampleDy)
-            dragState.directionSampleLocation = point
-        }
-
-        guard let motion = dragState.motion else {
-            return
-        }
-        (dx, dy) = motion.constrain(dx: dx, dy: dy)
 
         let frame = ResizeModel.resize(
             frame: dragState.frame,
@@ -389,21 +369,17 @@ private final class NativeDragState {
 private final class DragState: @unchecked Sendable {
     let window: AXUIElement
     var downLocation: CGPoint
-    var directionSampleLocation: CGPoint
     var frame: CGRect
     let direction: ResizeDirection
-    var motion: ResizeMotion?
 
     init(
         window: AXUIElement,
         downLocation: CGPoint,
-        directionSampleLocation: CGPoint,
         frame: CGRect,
         direction: ResizeDirection
     ) {
         self.window = window
         self.downLocation = downLocation
-        self.directionSampleLocation = directionSampleLocation
         self.frame = frame
         self.direction = direction
     }

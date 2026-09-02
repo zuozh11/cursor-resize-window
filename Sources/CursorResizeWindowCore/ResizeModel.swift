@@ -8,24 +8,68 @@ struct ResizeDirection: OptionSet, Equatable {
     static let right = ResizeDirection(rawValue: 1 << 2)
     static let bottom = ResizeDirection(rawValue: 1 << 3)
 
-    static func from(point: CGPoint, frame: CGRect) -> ResizeDirection {
-        var direction: ResizeDirection = []
-        let midpoint = CGPoint(x: frame.midX, y: frame.midY)
+}
 
-        if point.x < midpoint.x {
-            direction.insert(.left)
+enum ResizeTarget: CaseIterable, Equatable {
+    case left
+    case right
+    case top
+    case bottom
+    case leftTop
+    case rightTop
+    case leftBottom
+    case rightBottom
+
+    static func from(point: CGPoint, frame: CGRect) -> ResizeTarget {
+        let u = (point.x - frame.minX) / frame.width
+        let v = (point.y - frame.minY) / frame.height
+        let isInMiddleColumn = (frame.minX + frame.width / 3.0)...(frame.maxX - frame.width / 3.0) ~= point.x
+        let isInMiddleRow = (frame.minY + frame.height / 3.0)...(frame.maxY - frame.height / 3.0) ~= point.y
+
+        if isInMiddleRow && !isInMiddleColumn {
+            return u < 0.5 ? .left : .right
         }
-        if point.y < midpoint.y {
-            direction.insert(.top)
+        if isInMiddleColumn && !isInMiddleRow {
+            return v < 0.5 ? .top : .bottom
         }
-        if point.x > midpoint.x {
-            direction.insert(.right)
-        }
-        if point.y > midpoint.y {
-            direction.insert(.bottom)
+        if !isInMiddleColumn && !isInMiddleRow {
+            switch (u < 0.5, v < 0.5) {
+            case (true, true):
+                return .leftTop
+            case (false, true):
+                return .rightTop
+            case (true, false):
+                return .leftBottom
+            case (false, false):
+                return .rightBottom
+            }
         }
 
-        return direction
+        if abs(v - 0.5) <= abs(u - 0.5) {
+            return u < 0.5 ? .left : .right
+        }
+        return v < 0.5 ? .top : .bottom
+    }
+
+    var direction: ResizeDirection {
+        switch self {
+        case .left:
+            return .left
+        case .right:
+            return .right
+        case .top:
+            return .top
+        case .bottom:
+            return .bottom
+        case .leftTop:
+            return [.left, .top]
+        case .rightTop:
+            return [.right, .top]
+        case .leftBottom:
+            return [.left, .bottom]
+        case .rightBottom:
+            return [.right, .bottom]
+        }
     }
 }
 
@@ -59,18 +103,37 @@ enum ResizeModel {
 }
 
 struct NativeResizeMapping: Equatable {
-    private static let cornerInset: CGFloat = 5
+    private static let edgeInset: CGFloat = 5
 
     let anchor: CGPoint
     private let pointer: CGPoint
     private let offset: CGPoint
 
-    init(pointer: CGPoint, frame: CGRect) {
+    init(pointer: CGPoint, frame: CGRect, target: ResizeTarget) {
         self.pointer = pointer
-        anchor = CGPoint(
-            x: pointer.x < frame.midX ? frame.minX + Self.cornerInset : frame.maxX - Self.cornerInset,
-            y: pointer.y < frame.midY ? frame.minY + Self.cornerInset : frame.maxY - Self.cornerInset
-        )
+        let left = frame.minX + Self.edgeInset
+        let right = frame.maxX - Self.edgeInset
+        let top = frame.minY + Self.edgeInset
+        let bottom = frame.maxY - Self.edgeInset
+
+        switch target {
+        case .left:
+            anchor = CGPoint(x: left, y: pointer.y)
+        case .right:
+            anchor = CGPoint(x: right, y: pointer.y)
+        case .top:
+            anchor = CGPoint(x: pointer.x, y: top)
+        case .bottom:
+            anchor = CGPoint(x: pointer.x, y: bottom)
+        case .leftTop:
+            anchor = CGPoint(x: left, y: top)
+        case .rightTop:
+            anchor = CGPoint(x: right, y: top)
+        case .leftBottom:
+            anchor = CGPoint(x: left, y: bottom)
+        case .rightBottom:
+            anchor = CGPoint(x: right, y: bottom)
+        }
         offset = CGPoint(x: anchor.x - pointer.x, y: anchor.y - pointer.y)
     }
 
@@ -80,34 +143,5 @@ struct NativeResizeMapping: Equatable {
 
     func isClickable(in bounds: [CGRect]) -> Bool {
         bounds.contains { $0.contains(pointer) && $0.contains(anchor) }
-    }
-}
-
-enum ResizeMotion {
-    case horizontal
-    case vertical
-    case diagonal
-
-    private static let axisSnapSlope: CGFloat = 0.5
-
-    static func from(dx: CGFloat, dy: CGFloat) -> ResizeMotion {
-        if abs(dy) <= abs(dx) * axisSnapSlope {
-            return .horizontal
-        }
-        if abs(dx) <= abs(dy) * axisSnapSlope {
-            return .vertical
-        }
-        return .diagonal
-    }
-
-    func constrain(dx: CGFloat, dy: CGFloat) -> (CGFloat, CGFloat) {
-        switch self {
-        case .horizontal:
-            return (dx, 0)
-        case .vertical:
-            return (0, dy)
-        case .diagonal:
-            return (dx, dy)
-        }
     }
 }
