@@ -30,4 +30,26 @@ final class ResizeModelTests: XCTestCase {
 
         XCTAssertEqual(resized.size, CGSize(width: 1, height: 1))
     }
+
+    func testMapsNativeResizeToNearestCorner() {
+        let frame = CGRect(x: 100, y: 200, width: 400, height: 300)
+
+        XCTAssertEqual(
+            NativeResizeMapping(pointer: CGPoint(x: 150, y: 250), frame: frame).anchor,
+            CGPoint(x: 105, y: 205)
+        )
+        XCTAssertEqual(
+            NativeResizeMapping(pointer: CGPoint(x: 450, y: 450), frame: frame).anchor,
+            CGPoint(x: 495, y: 495)
+        )
+    }
+
+    func testTranslatesNativeResizeEventsByPointerToCornerOffset() {
+        let mapping = NativeResizeMapping(
+            pointer: CGPoint(x: 150, y: 250),
+            frame: CGRect(x: 100, y: 200, width: 400, height: 300)
+        )
+
+        XCTAssertEqual(mapping.translate(CGPoint(x: 170, y: 280)), CGPoint(x: 125, y: 235))
+    }
 }
