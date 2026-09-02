@@ -18,11 +18,6 @@ public enum RuntimeError: Error, CustomStringConvertible {
     }
 }
 
-public enum WindowResizeMode: String {
-    case accessibility
-    case native
-}
-
 public final class WindowResizeApp: @unchecked Sendable {
     private static let directionSampleDistance: CGFloat = 8
 
@@ -32,11 +27,8 @@ public final class WindowResizeApp: @unchecked Sendable {
     private var consumedMouseDown: CGEvent?
     private var dragDetected = false
     private var nativeDragState: NativeDragState?
-    private let mode: WindowResizeMode
 
-    public init(mode: WindowResizeMode = .accessibility) {
-        self.mode = mode
-    }
+    public init() {}
 
     public func run() throws {
         let promptOptions = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
@@ -71,7 +63,7 @@ public final class WindowResizeApp: @unchecked Sendable {
         CFRunLoopAddSource(CFRunLoopGetCurrent(), source, .commonModes)
         CGEvent.tapEnable(tap: tap, enable: true)
 
-        print("cursor-resize-window: running with ctrl (\(mode.rawValue) mode)")
+        print("cursor-resize-window: running with ctrl")
         CFRunLoopRun()
     }
 
@@ -96,7 +88,7 @@ public final class WindowResizeApp: @unchecked Sendable {
                 return Unmanaged.passUnretained(event)
             }
             dragDetected = true
-            if mode == .native {
+            if nativeDragState != nil {
                 return applyNativeResize(to: event)
             }
             applyAccessibilityResize(to: event.location)
@@ -111,7 +103,7 @@ public final class WindowResizeApp: @unchecked Sendable {
                 finishDrag()
                 return nil
             }
-            if mode == .native {
+            if nativeDragState != nil {
                 let rewrittenEvent = finishNativeResize(with: event)
                 finishDrag()
                 return rewrittenEvent
@@ -132,8 +124,9 @@ public final class WindowResizeApp: @unchecked Sendable {
             return false
         }
 
-        if mode == .native {
-            nativeDragState = NativeDragState(mapping: NativeResizeMapping(pointer: point, frame: frame))
+        let nativeMapping = NativeResizeMapping(pointer: point, frame: frame)
+        if nativeMapping.isClickable(in: activeDisplayBounds()) {
+            nativeDragState = NativeDragState(mapping: nativeMapping)
             AXUIElementPerformAction(window, kAXRaiseAction as CFString)
         } else {
             dragState = DragState(
@@ -146,6 +139,20 @@ public final class WindowResizeApp: @unchecked Sendable {
             frameApplier.beginDrag(for: window, initialFrame: frame)
         }
         return true
+    }
+
+    private func activeDisplayBounds() -> [CGRect] {
+        var displayCount: UInt32 = 0
+        guard CGGetActiveDisplayList(0, nil, &displayCount) == .success else {
+            return []
+        }
+
+        var displays = [CGDirectDisplayID](repeating: 0, count: Int(displayCount))
+        guard CGGetActiveDisplayList(displayCount, &displays, &displayCount) == .success else {
+            return []
+        }
+
+        return displays.prefix(Int(displayCount)).map(CGDisplayBounds)
     }
 
     private func applyAccessibilityResize(to point: CGPoint) {
