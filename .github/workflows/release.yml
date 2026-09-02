@@ -1,6 +1,12 @@
 name: Release
 
 on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (for example, v0.1.7)"
+        required: true
+        type: string
   push:
     tags:
       - "v*"
@@ -8,14 +14,55 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 jobs:
   release:
     runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ inputs.version || github.ref_name }}
     steps:
       - name: Check out main
         uses: actions/checkout@v6
         with:
           ref: main
+          fetch-depth: 0
+
+      - name: Validate release
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          RELEASE_REF: ${{ github.ref }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: |
+          if [[ ! "${VERSION}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Version must match vMAJOR.MINOR.PATCH" >&2
+            exit 1
+          fi
+
+          git fetch origin main --tags
+
+          if [[ "${EVENT_NAME}" == "workflow_dispatch" ]]; then
+            if [[ "${RELEASE_REF}" != "refs/heads/main" ]]; then
+              echo "Manual releases must run from main" >&2
+              exit 1
+            fi
+
+            if git rev-parse --verify --quiet "refs/tags/${VERSION}"; then
+              tag_sha="$(git rev-list -n 1 "${VERSION}")"
+              if [[ "${tag_sha}" != "${RELEASE_SHA}" ]]; then
+                echo "${VERSION} already points to ${tag_sha}" >&2
+                exit 1
+              fi
+            else
+              git tag "${VERSION}" "${RELEASE_SHA}"
+              git push origin "${VERSION}"
+            fi
+          elif ! git merge-base --is-ancestor "${RELEASE_SHA}" origin/main; then
+            echo "${VERSION} does not point to a commit on main" >&2
+            exit 1
+          fi
 
       - name: Check out Homebrew tap
         uses: actions/checkout@v6
@@ -25,8 +72,6 @@ jobs:
           ssh-key: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
 
       - name: Update Homebrew formula
-        env:
-          VERSION: ${{ github.ref_name }}
         run: |
           archive_url="https://github.com/${GITHUB_REPOSITORY}/archive/refs/tags/${VERSION}.tar.gz"
           curl --fail --location --retry 5 --output source.tar.gz "$archive_url"
@@ -37,18 +82,22 @@ jobs:
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Formula/cursor-resize-window.rb
-          git commit -m "build: update formula to ${VERSION}"
-          git push origin HEAD:main
+          if ! git diff --quiet -- Formula/cursor-resize-window.rb; then
+            git add Formula/cursor-resize-window.rb
+            git commit -m "build: update formula to ${VERSION}"
+            git push origin HEAD:main
+          fi
 
           cp Formula/cursor-resize-window.rb homebrew-tap/Formula/cursor-resize-window.rb
           git -C homebrew-tap config user.name "github-actions[bot]"
           git -C homebrew-tap config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git -C homebrew-tap add Formula/cursor-resize-window.rb
-          git -C homebrew-tap commit -m "build: update cursor-resize-window to ${VERSION}"
-          git -C homebrew-tap push origin HEAD:main
+          if ! git -C homebrew-tap diff --quiet -- Formula/cursor-resize-window.rb; then
+            git -C homebrew-tap add Formula/cursor-resize-window.rb
+            git -C homebrew-tap commit -m "build: update cursor-resize-window to ${VERSION}"
+            git -C homebrew-tap push origin HEAD:main
+          fi
 
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "${GITHUB_REF_NAME}" --verify-tag --generate-notes
+        run: gh release view "${VERSION}" >/dev/null || gh release create "${VERSION}" --verify-tag --generate-notes
