@@ -21,7 +21,7 @@ cursor-resize-window
 
 Then hold `ctrl`, left-click a window, and drag to resize it.
 
-The utility redirects the drag to the nearest macOS resize corner so Window Server performs the resize whenever that corner is inside an active display. If the corner is off-screen, it falls back to updating the window frame through the Accessibility API.
+The utility redirects the drag to the nearest macOS resize corner so Window Server performs the resize whenever that corner is on the same active display as the pointer. If the corner is off-screen or on another display, it falls back to updating the window frame through the Accessibility API.
 
 ## Service Commands
 

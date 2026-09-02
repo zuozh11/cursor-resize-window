@@ -62,9 +62,11 @@ struct NativeResizeMapping: Equatable {
     private static let cornerInset: CGFloat = 5
 
     let anchor: CGPoint
+    private let pointer: CGPoint
     private let offset: CGPoint
 
     init(pointer: CGPoint, frame: CGRect) {
+        self.pointer = pointer
         anchor = CGPoint(
             x: pointer.x < frame.midX ? frame.minX + Self.cornerInset : frame.maxX - Self.cornerInset,
             y: pointer.y < frame.midY ? frame.minY + Self.cornerInset : frame.maxY - Self.cornerInset
@@ -77,7 +79,7 @@ struct NativeResizeMapping: Equatable {
     }
 
     func isClickable(in bounds: [CGRect]) -> Bool {
-        bounds.contains { $0.contains(anchor) }
+        bounds.contains { $0.contains(pointer) && $0.contains(anchor) }
     }
 }
 
