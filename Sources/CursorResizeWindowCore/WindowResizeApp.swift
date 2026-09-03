@@ -26,7 +26,7 @@ public final class WindowResizeApp: @unchecked Sendable {
     private var consumedMouseDown: CGEvent?
     private var dragDetected = false
     private var nativeDragState: NativeDragState?
-    private var synthesizedPointerOverlay: SynthesizedPointerOverlay?
+    private var dragFeedbackOverlay: DragFeedbackOverlay?
 
     public init() {}
 
@@ -63,7 +63,7 @@ public final class WindowResizeApp: @unchecked Sendable {
         }
 
         eventTap = tap
-        synthesizedPointerOverlay = SynthesizedPointerOverlay()
+        dragFeedbackOverlay = DragFeedbackOverlay()
         let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
         CFRunLoopAddSource(CFRunLoopGetCurrent(), source, .commonModes)
         CGEvent.tapEnable(tap: tap, enable: true)
@@ -134,7 +134,7 @@ public final class WindowResizeApp: @unchecked Sendable {
         let nativeMapping = NativeDragMapping(pointer: point, frame: frame, target: target)
         if nativeMapping.isClickable(in: activeDisplayBounds()) {
             nativeDragState = NativeDragState(window: window, mapping: nativeMapping)
-            showSynthesizedPointer(at: nativeMapping.anchor)
+            beginDragFeedback(at: nativeMapping.anchor, windowFrame: frame, target: target)
         } else if let resizeDirection = target.resizeDirection {
             dragState = DragState(
                 window: window,
@@ -194,6 +194,7 @@ public final class WindowResizeApp: @unchecked Sendable {
             return Unmanaged.passUnretained(event)
         }
 
+        hideRegionPreview()
         event.flags.remove(.maskControl)
         if nativeDragState.needsMouseDown {
             nativeDragState.needsMouseDown = false
@@ -230,22 +231,42 @@ public final class WindowResizeApp: @unchecked Sendable {
     }
 
     private func showSynthesizedPointer(at point: CGPoint) {
-        guard let synthesizedPointerOverlay else {
+        guard let dragFeedbackOverlay else {
             return
         }
 
         DispatchQueue.main.async {
-            synthesizedPointerOverlay.show(at: point)
+            dragFeedbackOverlay.showPointer(at: point)
         }
     }
 
     private func hideSynthesizedPointer() {
-        guard let synthesizedPointerOverlay else {
+        guard let dragFeedbackOverlay else {
             return
         }
 
         DispatchQueue.main.async {
-            synthesizedPointerOverlay.hide()
+            dragFeedbackOverlay.hide()
+        }
+    }
+
+    private func beginDragFeedback(at point: CGPoint, windowFrame: CGRect, target: ResizeTarget) {
+        guard let dragFeedbackOverlay else {
+            return
+        }
+
+        DispatchQueue.main.async {
+            dragFeedbackOverlay.begin(at: point, windowFrame: windowFrame, target: target)
+        }
+    }
+
+    private func hideRegionPreview() {
+        guard let dragFeedbackOverlay else {
+            return
+        }
+
+        DispatchQueue.main.async {
+            dragFeedbackOverlay.hideRegionPreview()
         }
     }
 
