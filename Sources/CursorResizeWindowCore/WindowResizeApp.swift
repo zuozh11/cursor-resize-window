@@ -133,7 +133,13 @@ public final class WindowResizeApp: @unchecked Sendable {
         let target = ResizeTarget.from(point: point, frame: frame)
         let nativeMapping = NativeDragMapping(pointer: point, frame: frame, target: target)
         if nativeMapping.isClickable(in: activeDisplayBounds()) {
-            nativeDragState = NativeDragState(window: window, mapping: nativeMapping)
+            nativeDragState = NativeDragState(
+                window: window,
+                mapping: nativeMapping,
+                pointer: point,
+                frame: frame,
+                target: target
+            )
             beginDragFeedback(at: nativeMapping.anchor, windowFrame: frame, target: target)
         } else if let resizeDirection = target.resizeDirection {
             dragState = DragState(
@@ -194,7 +200,8 @@ public final class WindowResizeApp: @unchecked Sendable {
             return Unmanaged.passUnretained(event)
         }
 
-        hideRegionPreview()
+        let pointer = event.location
+        let previewFrame = nativeDragState.updatePreviewFrame(for: pointer)
         event.flags.remove(.maskControl)
         if nativeDragState.needsMouseDown {
             nativeDragState.needsMouseDown = false
@@ -204,7 +211,7 @@ public final class WindowResizeApp: @unchecked Sendable {
         } else {
             event.location = nativeDragState.mapping.translate(event.location)
         }
-        showSynthesizedPointer(at: event.location)
+        updateDragFeedback(at: event.location, windowFrame: previewFrame)
         return Unmanaged.passUnretained(event)
     }
 
@@ -240,6 +247,16 @@ public final class WindowResizeApp: @unchecked Sendable {
         }
     }
 
+    private func updateDragFeedback(at point: CGPoint, windowFrame: CGRect) {
+        guard let dragFeedbackOverlay else {
+            return
+        }
+
+        DispatchQueue.main.async {
+            dragFeedbackOverlay.update(at: point, windowFrame: windowFrame)
+        }
+    }
+
     private func hideSynthesizedPointer() {
         guard let dragFeedbackOverlay else {
             return
@@ -257,16 +274,6 @@ public final class WindowResizeApp: @unchecked Sendable {
 
         DispatchQueue.main.async {
             dragFeedbackOverlay.begin(at: point, windowFrame: windowFrame, target: target)
-        }
-    }
-
-    private func hideRegionPreview() {
-        guard let dragFeedbackOverlay else {
-            return
-        }
-
-        DispatchQueue.main.async {
-            dragFeedbackOverlay.hideRegionPreview()
         }
     }
 
@@ -415,11 +422,42 @@ public final class WindowResizeApp: @unchecked Sendable {
 private final class NativeDragState {
     let window: AXUIElement
     let mapping: NativeDragMapping
+    private let target: ResizeTarget
+    private var pointer: CGPoint
+    private var previewFrame: CGRect
     var needsMouseDown = true
 
-    init(window: AXUIElement, mapping: NativeDragMapping) {
+    init(
+        window: AXUIElement,
+        mapping: NativeDragMapping,
+        pointer: CGPoint,
+        frame: CGRect,
+        target: ResizeTarget
+    ) {
         self.window = window
         self.mapping = mapping
+        self.pointer = pointer
+        previewFrame = frame
+        self.target = target
+    }
+
+    func updatePreviewFrame(for nextPointer: CGPoint) -> CGRect {
+        let dx = nextPointer.x - pointer.x
+        let dy = nextPointer.y - pointer.y
+
+        if target == .move {
+            previewFrame = previewFrame.offsetBy(dx: dx, dy: dy)
+        } else if let direction = target.resizeDirection {
+            previewFrame = ResizeModel.resize(
+                frame: previewFrame,
+                direction: direction,
+                dx: dx,
+                dy: dy
+            )
+        }
+
+        pointer = nextPointer
+        return previewFrame
     }
 }
 

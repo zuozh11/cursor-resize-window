@@ -21,7 +21,7 @@ cursor-resize-window
 
 Then hold `ctrl`, left-click a window, and drag to resize or move it.
 
-A red dot tracks the rewritten mouse position that macOS receives during native window movement and resizing. When the mouse button goes down, a temporary 3-by-3 preview shows the resize regions and highlights the selected region; the preview disappears once dragging starts. This feedback is not shown for Accessibility-based fallback resizing.
+A red dot tracks the rewritten mouse position that macOS receives during native window movement and resizing. A 3-by-3 preview shows the resize regions, highlights the selected region, and follows the window for the entire gesture. This feedback is not shown for Accessibility-based fallback resizing.
 
 The middle third of each axis forms a cross-shaped region: the left and right arms resize width, while the top and bottom arms resize height. The four outer corner regions resize both axes. Dragging from the center intersection moves the window freely in any direction.
 

@@ -40,14 +40,14 @@ final class DragFeedbackOverlay {
 
     func begin(at point: CGPoint, windowFrame: CGRect, target: ResizeTarget) {
         showPointer(at: point)
-
-        guard let regionFrame = appKitFrame(from: windowFrame) else {
-            return
-        }
-
         regionView.target = target
-        regionPanel.setFrame(regionFrame, display: true)
+        updateRegionFrame(windowFrame)
         regionPanel.orderFrontRegardless()
+    }
+
+    func update(at point: CGPoint, windowFrame: CGRect) {
+        showPointer(at: point)
+        updateRegionFrame(windowFrame)
     }
 
     func showPointer(at point: CGPoint) {
@@ -72,17 +72,21 @@ final class DragFeedbackOverlay {
         }
     }
 
-    func hideRegionPreview() {
+    func hide() {
         if regionPanel.isVisible {
             regionPanel.orderOut(nil)
         }
-    }
-
-    func hide() {
-        hideRegionPreview()
         if dotPanel.isVisible {
             dotPanel.orderOut(nil)
         }
+    }
+
+    private func updateRegionFrame(_ windowFrame: CGRect) {
+        guard let regionFrame = appKitFrame(from: windowFrame) else {
+            return
+        }
+
+        regionPanel.setFrame(regionFrame, display: true)
     }
 
     private func appKitFrame(from frame: CGRect) -> NSRect? {
