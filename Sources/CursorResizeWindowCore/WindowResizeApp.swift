@@ -137,7 +137,6 @@ public final class WindowResizeApp: @unchecked Sendable {
                 window: window,
                 mapping: nativeMapping,
                 displayBounds: displayBounds,
-                pointer: point,
                 frame: frame,
                 target: target
             )
@@ -207,8 +206,6 @@ public final class WindowResizeApp: @unchecked Sendable {
             return Unmanaged.passUnretained(event)
         }
 
-        let pointer = event.location
-        let previewFrame = nativeDragState.updatePreviewFrame(for: pointer)
         event.flags.remove(.maskControl)
         if nativeDragState.needsMouseDown {
             nativeDragState.needsMouseDown = false
@@ -218,6 +215,7 @@ public final class WindowResizeApp: @unchecked Sendable {
         } else {
             event.location = nativeDragState.translate(event.location)
         }
+        let previewFrame = nativeDragState.updatePreviewFrame(for: event.location)
         updateDragFeedback(at: event.location, windowFrame: previewFrame)
         return Unmanaged.passUnretained(event)
     }
@@ -431,7 +429,7 @@ private final class NativeDragState {
     let mapping: NativeDragMapping
     private let displayBounds: CGRect
     private let target: ResizeTarget
-    private var pointer: CGPoint
+    private var synthesizedPointer: CGPoint
     private var previewFrame: CGRect
     var needsMouseDown = true
 
@@ -439,14 +437,13 @@ private final class NativeDragState {
         window: AXUIElement,
         mapping: NativeDragMapping,
         displayBounds: CGRect,
-        pointer: CGPoint,
         frame: CGRect,
         target: ResizeTarget
     ) {
         self.window = window
         self.mapping = mapping
         self.displayBounds = displayBounds
-        self.pointer = pointer
+        synthesizedPointer = mapping.anchor
         previewFrame = frame
         self.target = target
     }
@@ -455,9 +452,9 @@ private final class NativeDragState {
         mapping.translate(point, constrainedTo: displayBounds)
     }
 
-    func updatePreviewFrame(for nextPointer: CGPoint) -> CGRect {
-        let dx = nextPointer.x - pointer.x
-        let dy = nextPointer.y - pointer.y
+    func updatePreviewFrame(for nextSynthesizedPointer: CGPoint) -> CGRect {
+        let dx = nextSynthesizedPointer.x - synthesizedPointer.x
+        let dy = nextSynthesizedPointer.y - synthesizedPointer.y
 
         if target == .move {
             previewFrame = previewFrame.offsetBy(dx: dx, dy: dy)
@@ -470,7 +467,7 @@ private final class NativeDragState {
             )
         }
 
-        pointer = nextPointer
+        synthesizedPointer = nextSynthesizedPointer
         return previewFrame
     }
 }
