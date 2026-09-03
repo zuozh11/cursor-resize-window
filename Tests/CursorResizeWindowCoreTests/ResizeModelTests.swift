@@ -19,11 +19,11 @@ final class ResizeModelTests: XCTestCase {
         XCTAssertEqual(target(x: 0.5, y: 0.9), .bottom)
     }
 
-    func testMapsCenterIntersectionByNearestCenterLine() {
-        XCTAssertEqual(target(x: 0.4, y: 0.5), .left)
-        XCTAssertEqual(target(x: 0.5, y: 0.4), .top)
-        XCTAssertEqual(target(x: 0.4, y: 0.4), .left)
-        XCTAssertEqual(target(x: 0.5, y: 0.5), .right)
+    func testMapsCenterIntersectionToMove() {
+        XCTAssertEqual(target(x: 0.4, y: 0.5), .move)
+        XCTAssertEqual(target(x: 0.5, y: 0.4), .move)
+        XCTAssertEqual(target(x: 0.4, y: 0.4), .move)
+        XCTAssertEqual(target(x: 0.5, y: 0.5), .move)
     }
 
     func testIncludesThirdBoundariesInCross() {
@@ -31,7 +31,8 @@ final class ResizeModelTests: XCTestCase {
         XCTAssertEqual(target(x: 2.0 / 3.0, y: 0.1), .top)
         XCTAssertEqual(target(x: 0.1, y: 1.0 / 3.0), .left)
         XCTAssertEqual(target(x: 0.1, y: 2.0 / 3.0), .left)
-        XCTAssertEqual(target(x: 1.0 / 3.0, y: 1.0 / 3.0), .left)
+        XCTAssertEqual(target(x: 1.0 / 3.0, y: 1.0 / 3.0), .move)
+        XCTAssertEqual(target(x: 2.0 / 3.0, y: 2.0 / 3.0), .move)
     }
 
     func testIncludesExactThirdBoundaryForNegativeNonDivisibleFrame() {
@@ -41,8 +42,9 @@ final class ResizeModelTests: XCTestCase {
         XCTAssertEqual(ResizeTarget.from(point: point, frame: frame), .top)
     }
 
-    func testMapsEveryTargetToResizeDirection() {
-        let expected: [ResizeTarget: ResizeDirection] = [
+    func testMapsResizeTargetsToDirections() {
+        let expected: [ResizeTarget: ResizeDirection?] = [
+            .move: nil,
             .left: .left,
             .right: .right,
             .top: .top,
@@ -54,13 +56,14 @@ final class ResizeModelTests: XCTestCase {
         ]
 
         for target in ResizeTarget.allCases {
-            XCTAssertEqual(target.direction, expected[target])
+            XCTAssertEqual(target.resizeDirection, expected[target]!)
         }
     }
 
     func testMapsEveryTargetToNativeAnchor() {
         let pointer = CGPoint(x: 250, y: 350)
         let expected: [ResizeTarget: CGPoint] = [
+            .move: CGPoint(x: 250, y: 203),
             .left: CGPoint(x: 102, y: 350),
             .right: CGPoint(x: 398, y: 350),
             .top: CGPoint(x: 250, y: 202),
@@ -72,7 +75,7 @@ final class ResizeModelTests: XCTestCase {
         ]
 
         for target in ResizeTarget.allCases {
-            let mapping = NativeResizeMapping(pointer: pointer, frame: frame, target: target)
+            let mapping = NativeDragMapping(pointer: pointer, frame: frame, target: target)
             XCTAssertEqual(mapping.anchor, expected[target])
         }
     }
@@ -112,20 +115,38 @@ final class ResizeModelTests: XCTestCase {
         XCTAssertEqual(resized.size, CGSize(width: 1, height: 1))
     }
 
-    func testTranslatesNativeResizeEventsByPointerToAnchorOffset() {
-        let mapping = NativeResizeMapping(pointer: CGPoint(x: 150, y: 350), frame: frame, target: .left)
+    func testTranslatesNativeMoveEventsOnBothAxes() {
+        let mapping = NativeDragMapping(pointer: CGPoint(x: 250, y: 350), frame: frame, target: .move)
 
-        XCTAssertEqual(mapping.translate(CGPoint(x: 170, y: 380)), CGPoint(x: 122, y: 380))
+        XCTAssertEqual(mapping.translate(CGPoint(x: 270, y: 380)), CGPoint(x: 270, y: 233))
+    }
+
+    func testLocksUnrelatedAxisForNativeEdgeResizeEvents() {
+        let left = NativeDragMapping(pointer: CGPoint(x: 150, y: 350), frame: frame, target: .left)
+        let right = NativeDragMapping(pointer: CGPoint(x: 350, y: 350), frame: frame, target: .right)
+        let top = NativeDragMapping(pointer: CGPoint(x: 250, y: 250), frame: frame, target: .top)
+        let bottom = NativeDragMapping(pointer: CGPoint(x: 250, y: 450), frame: frame, target: .bottom)
+
+        XCTAssertEqual(left.translate(CGPoint(x: 170, y: 380)), CGPoint(x: 122, y: 350))
+        XCTAssertEqual(right.translate(CGPoint(x: 330, y: 380)), CGPoint(x: 378, y: 350))
+        XCTAssertEqual(top.translate(CGPoint(x: 270, y: 280)), CGPoint(x: 250, y: 232))
+        XCTAssertEqual(bottom.translate(CGPoint(x: 270, y: 420)), CGPoint(x: 250, y: 468))
+    }
+
+    func testTranslatesNativeCornerResizeEventsOnBothAxes() {
+        let mapping = NativeDragMapping(pointer: CGPoint(x: 150, y: 250), frame: frame, target: .leftTop)
+
+        XCTAssertEqual(mapping.translate(CGPoint(x: 170, y: 280)), CGPoint(x: 125, y: 235))
     }
 
     func testUsesNativeResizeWhenPointerAndAnchorAreOnSameDisplay() {
-        let mapping = NativeResizeMapping(pointer: CGPoint(x: 150, y: 350), frame: frame, target: .left)
+        let mapping = NativeDragMapping(pointer: CGPoint(x: 150, y: 350), frame: frame, target: .left)
 
         XCTAssertTrue(mapping.isClickable(in: [CGRect(x: 0, y: 0, width: 1440, height: 900)]))
     }
 
     func testFallsBackWhenNativeResizeAnchorIsOutsideClickableDisplayBounds() {
-        let mapping = NativeResizeMapping(
+        let mapping = NativeDragMapping(
             pointer: CGPoint(x: 500, y: 300),
             frame: CGRect(x: -200, y: 100, width: 1600, height: 600),
             target: .right
@@ -135,7 +156,7 @@ final class ResizeModelTests: XCTestCase {
     }
 
     func testFallsBackWhenNativeResizeAnchorIsOnAnotherDisplay() {
-        let mapping = NativeResizeMapping(
+        let mapping = NativeDragMapping(
             pointer: CGPoint(x: 800, y: 300),
             frame: CGRect(x: -200, y: 100, width: 1600, height: 600),
             target: .right

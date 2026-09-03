@@ -123,18 +123,19 @@ public final class WindowResizeApp: @unchecked Sendable {
         }
 
         let target = ResizeTarget.from(point: point, frame: frame)
-        let nativeMapping = NativeResizeMapping(pointer: point, frame: frame, target: target)
+        let nativeMapping = NativeDragMapping(pointer: point, frame: frame, target: target)
         if nativeMapping.isClickable(in: activeDisplayBounds()) {
-            nativeDragState = NativeDragState(mapping: nativeMapping)
-            AXUIElementPerformAction(window, kAXRaiseAction as CFString)
-        } else {
+            nativeDragState = NativeDragState(window: window, mapping: nativeMapping)
+        } else if let resizeDirection = target.resizeDirection {
             dragState = DragState(
                 window: window,
                 downLocation: point,
                 frame: frame,
-                direction: target.direction
+                direction: resizeDirection
             )
             frameApplier.beginDrag(for: window, initialFrame: frame)
+        } else {
+            return false
         }
         return true
     }
@@ -187,6 +188,7 @@ public final class WindowResizeApp: @unchecked Sendable {
         event.flags.remove(.maskControl)
         if nativeDragState.needsMouseDown {
             nativeDragState.needsMouseDown = false
+            AXUIElementPerformAction(nativeDragState.window, kAXRaiseAction as CFString)
             event.type = .leftMouseDown
             event.location = nativeDragState.mapping.anchor
         } else {
@@ -358,10 +360,12 @@ public final class WindowResizeApp: @unchecked Sendable {
 }
 
 private final class NativeDragState {
-    let mapping: NativeResizeMapping
+    let window: AXUIElement
+    let mapping: NativeDragMapping
     var needsMouseDown = true
 
-    init(mapping: NativeResizeMapping) {
+    init(window: AXUIElement, mapping: NativeDragMapping) {
+        self.window = window
         self.mapping = mapping
     }
 }

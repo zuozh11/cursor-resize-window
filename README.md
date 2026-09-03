@@ -1,6 +1,6 @@
 # cursor-resize-window
 
-`cursor-resize-window` is a small macOS utility that recreates yabai-style window resizing without running yabai itself. Hold `ctrl`, left-click anywhere in a window, and drag to resize from the selected edge or corner.
+`cursor-resize-window` is a small macOS utility that recreates yabai-style window dragging without running yabai itself. Hold `ctrl`, left-click anywhere in a window, and drag to resize from the selected edge or corner or to move it from the center.
 
 ## Install
 
@@ -19,11 +19,11 @@ Run in the foreground:
 cursor-resize-window
 ```
 
-Then hold `ctrl`, left-click a window, and drag to resize it.
+Then hold `ctrl`, left-click a window, and drag to resize or move it.
 
-The middle third of each axis forms a cross-shaped edge region: the left and right arms resize width, while the top and bottom arms resize height. The four outer corner regions resize both axes. In the center intersection, the nearest center line selects the axis, with width winning ties.
+The middle third of each axis forms a cross-shaped region: the left and right arms resize width, while the top and bottom arms resize height. The four outer corner regions resize both axes. Dragging from the center intersection moves the window freely in any direction.
 
-The utility redirects the drag to the selected macOS resize edge or corner so Window Server performs the resize whenever that target is on the same active display as the pointer. If the target is off-screen or on another display, it falls back to updating the window frame through the Accessibility API.
+The utility redirects the drag to the selected macOS resize edge, corner, or title bar so Window Server performs the operation whenever that target is on the same active display as the pointer. If a resize target is off-screen or on another display, it falls back to updating the window frame through the Accessibility API. Moving is native-only, so a center drag is left untouched when its title-bar target is not clickable on the pointer's display.
 
 ## Service Commands
 

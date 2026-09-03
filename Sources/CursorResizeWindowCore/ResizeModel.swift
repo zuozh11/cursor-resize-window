@@ -11,6 +11,7 @@ struct ResizeDirection: OptionSet, Equatable {
 }
 
 enum ResizeTarget: CaseIterable, Equatable {
+    case move
     case left
     case right
     case top
@@ -45,14 +46,13 @@ enum ResizeTarget: CaseIterable, Equatable {
             }
         }
 
-        if abs(v - 0.5) <= abs(u - 0.5) {
-            return u < 0.5 ? .left : .right
-        }
-        return v < 0.5 ? .top : .bottom
+        return .move
     }
 
-    var direction: ResizeDirection {
+    var resizeDirection: ResizeDirection? {
         switch self {
+        case .move:
+            return nil
         case .left:
             return .left
         case .right:
@@ -102,17 +102,22 @@ enum ResizeModel {
     }
 }
 
-struct NativeResizeMapping: Equatable {
+struct NativeDragMapping: Equatable {
     private static let edgeInset: CGFloat = 2
     private static let cornerInset: CGFloat = 5
+    private static let titleBarInset: CGFloat = 3
 
     let anchor: CGPoint
+    private let target: ResizeTarget
     private let pointer: CGPoint
     private let offset: CGPoint
 
     init(pointer: CGPoint, frame: CGRect, target: ResizeTarget) {
+        self.target = target
         self.pointer = pointer
         switch target {
+        case .move:
+            anchor = CGPoint(x: pointer.x, y: frame.minY + Self.titleBarInset)
         case .left:
             anchor = CGPoint(x: frame.minX + Self.edgeInset, y: pointer.y)
         case .right:
@@ -146,7 +151,14 @@ struct NativeResizeMapping: Equatable {
     }
 
     func translate(_ point: CGPoint) -> CGPoint {
-        CGPoint(x: point.x + offset.x, y: point.y + offset.y)
+        switch target {
+        case .move, .leftTop, .rightTop, .leftBottom, .rightBottom:
+            return CGPoint(x: point.x + offset.x, y: point.y + offset.y)
+        case .left, .right:
+            return CGPoint(x: point.x + offset.x, y: anchor.y)
+        case .top, .bottom:
+            return CGPoint(x: anchor.x, y: point.y + offset.y)
+        }
     }
 
     func isClickable(in bounds: [CGRect]) -> Bool {
