@@ -139,6 +139,38 @@ final class ResizeModelTests: XCTestCase {
         XCTAssertEqual(mapping.translate(CGPoint(x: 170, y: 280)), CGPoint(x: 125, y: 235))
     }
 
+    func testKeepsTranslatedNativeEventsInsideTheDisplayEdgeSafeArea() {
+        let display = CGRect(x: 0, y: 0, width: 1000, height: 800)
+        let top = NativeDragMapping(
+            pointer: CGPoint(x: 250, y: 300),
+            frame: frame,
+            target: .top
+        )
+        let right = NativeDragMapping(
+            pointer: CGPoint(x: 350, y: 350),
+            frame: frame,
+            target: .right
+        )
+        let bottom = NativeDragMapping(
+            pointer: CGPoint(x: 250, y: 450),
+            frame: frame,
+            target: .bottom
+        )
+
+        XCTAssertEqual(
+            top.translate(CGPoint(x: 250, y: 0), constrainedTo: display),
+            CGPoint(x: 250, y: 20)
+        )
+        XCTAssertEqual(
+            right.translate(CGPoint(x: 1200, y: 350), constrainedTo: display),
+            CGPoint(x: 980, y: 350)
+        )
+        XCTAssertEqual(
+            bottom.translate(CGPoint(x: 250, y: 900), constrainedTo: display),
+            CGPoint(x: 250, y: 792)
+        )
+    }
+
     func testUsesNativeResizeWhenPointerAndAnchorAreOnSameDisplay() {
         let mapping = NativeDragMapping(pointer: CGPoint(x: 150, y: 350), frame: frame, target: .left)
 

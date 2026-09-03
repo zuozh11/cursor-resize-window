@@ -132,10 +132,11 @@ public final class WindowResizeApp: @unchecked Sendable {
 
         let target = ResizeTarget.from(point: point, frame: frame)
         let nativeMapping = NativeDragMapping(pointer: point, frame: frame, target: target)
-        if nativeMapping.isClickable(in: activeDisplayBounds()) {
+        if let displayBounds = nativeMapping.clickableDisplay(in: activeDisplayBounds()) {
             nativeDragState = NativeDragState(
                 window: window,
                 mapping: nativeMapping,
+                displayBounds: displayBounds,
                 pointer: point,
                 frame: frame,
                 target: target
@@ -156,17 +157,23 @@ public final class WindowResizeApp: @unchecked Sendable {
     }
 
     private func activeDisplayBounds() -> [CGRect] {
-        var displayCount: UInt32 = 0
-        guard CGGetActiveDisplayList(0, nil, &displayCount) == .success else {
-            return []
-        }
+        MainActor.assumeIsolated {
+            let screens = NSScreen.screens
+            guard let primaryScreen = screens.first else {
+                return []
+            }
 
-        var displays = [CGDirectDisplayID](repeating: 0, count: Int(displayCount))
-        guard CGGetActiveDisplayList(displayCount, &displays, &displayCount) == .success else {
-            return []
+            let flipReference = primaryScreen.frame.maxY
+            return screens.map { screen in
+                let visibleFrame = screen.visibleFrame
+                return CGRect(
+                    x: visibleFrame.minX,
+                    y: flipReference - visibleFrame.maxY,
+                    width: visibleFrame.width,
+                    height: visibleFrame.height
+                )
+            }
         }
-
-        return displays.prefix(Int(displayCount)).map(CGDisplayBounds)
     }
 
     private func applyAccessibilityResize(to point: CGPoint) {
@@ -209,7 +216,7 @@ public final class WindowResizeApp: @unchecked Sendable {
             event.type = .leftMouseDown
             event.location = nativeDragState.mapping.anchor
         } else {
-            event.location = nativeDragState.mapping.translate(event.location)
+            event.location = nativeDragState.translate(event.location)
         }
         updateDragFeedback(at: event.location, windowFrame: previewFrame)
         return Unmanaged.passUnretained(event)
@@ -221,7 +228,7 @@ public final class WindowResizeApp: @unchecked Sendable {
         }
 
         event.flags.remove(.maskControl)
-        event.location = nativeDragState.mapping.translate(event.location)
+        event.location = nativeDragState.translate(event.location)
         showSynthesizedPointer(at: event.location)
         return Unmanaged.passUnretained(event)
     }
@@ -422,6 +429,7 @@ public final class WindowResizeApp: @unchecked Sendable {
 private final class NativeDragState {
     let window: AXUIElement
     let mapping: NativeDragMapping
+    private let displayBounds: CGRect
     private let target: ResizeTarget
     private var pointer: CGPoint
     private var previewFrame: CGRect
@@ -430,15 +438,21 @@ private final class NativeDragState {
     init(
         window: AXUIElement,
         mapping: NativeDragMapping,
+        displayBounds: CGRect,
         pointer: CGPoint,
         frame: CGRect,
         target: ResizeTarget
     ) {
         self.window = window
         self.mapping = mapping
+        self.displayBounds = displayBounds
         self.pointer = pointer
         previewFrame = frame
         self.target = target
+    }
+
+    func translate(_ point: CGPoint) -> CGPoint {
+        mapping.translate(point, constrainedTo: displayBounds)
     }
 
     func updatePreviewFrame(for nextPointer: CGPoint) -> CGRect {
