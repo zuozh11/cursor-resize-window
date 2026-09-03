@@ -21,6 +21,8 @@ cursor-resize-window
 
 Then hold `ctrl`, left-click a window, and drag to resize or move it.
 
+A red dot tracks the rewritten mouse position that macOS receives during native window movement and resizing. It disappears when the gesture ends and is not shown for Accessibility-based fallback resizing.
+
 The middle third of each axis forms a cross-shaped region: the left and right arms resize width, while the top and bottom arms resize height. The four outer corner regions resize both axes. Dragging from the center intersection moves the window freely in any direction.
 
 The utility redirects the drag to the selected macOS resize edge, corner, or title bar so Window Server performs the operation whenever that target is on the same active display as the pointer. If a resize target is off-screen or on another display, it falls back to updating the window frame through the Accessibility API. Moving is native-only, so a center drag is left untouched when its title-bar target is not clickable on the pointer's display.

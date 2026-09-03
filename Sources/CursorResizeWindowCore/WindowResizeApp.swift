@@ -1,4 +1,5 @@
 @preconcurrency import ApplicationServices
+@preconcurrency import AppKit
 @preconcurrency import CoreGraphics
 import Darwin
 import Foundation
@@ -25,10 +26,15 @@ public final class WindowResizeApp: @unchecked Sendable {
     private var consumedMouseDown: CGEvent?
     private var dragDetected = false
     private var nativeDragState: NativeDragState?
+    private var synthesizedPointerOverlay: SynthesizedPointerOverlay?
 
     public init() {}
 
+    @MainActor
     public func run() throws {
+        let application = NSApplication.shared
+        application.setActivationPolicy(.accessory)
+
         let promptOptions = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
         guard AXIsProcessTrustedWithOptions(promptOptions) else {
             throw RuntimeError.accessibilityPermissionRequired
@@ -57,16 +63,18 @@ public final class WindowResizeApp: @unchecked Sendable {
         }
 
         eventTap = tap
+        synthesizedPointerOverlay = SynthesizedPointerOverlay()
         let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
         CFRunLoopAddSource(CFRunLoopGetCurrent(), source, .commonModes)
         CGEvent.tapEnable(tap: tap, enable: true)
 
         print("cursor-resize-window: running with ctrl")
-        CFRunLoopRun()
+        application.run()
     }
 
     fileprivate func handle(_ type: CGEventType, event: CGEvent, proxy: CGEventTapProxy) -> Unmanaged<CGEvent>? {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+            hideSynthesizedPointer()
             if let eventTap {
                 CGEvent.tapEnable(tap: eventTap, enable: true)
             }
@@ -126,6 +134,7 @@ public final class WindowResizeApp: @unchecked Sendable {
         let nativeMapping = NativeDragMapping(pointer: point, frame: frame, target: target)
         if nativeMapping.isClickable(in: activeDisplayBounds()) {
             nativeDragState = NativeDragState(window: window, mapping: nativeMapping)
+            showSynthesizedPointer(at: nativeMapping.anchor)
         } else if let resizeDirection = target.resizeDirection {
             dragState = DragState(
                 window: window,
@@ -194,6 +203,7 @@ public final class WindowResizeApp: @unchecked Sendable {
         } else {
             event.location = nativeDragState.mapping.translate(event.location)
         }
+        showSynthesizedPointer(at: event.location)
         return Unmanaged.passUnretained(event)
     }
 
@@ -204,6 +214,7 @@ public final class WindowResizeApp: @unchecked Sendable {
 
         event.flags.remove(.maskControl)
         event.location = nativeDragState.mapping.translate(event.location)
+        showSynthesizedPointer(at: event.location)
         return Unmanaged.passUnretained(event)
     }
 
@@ -215,6 +226,27 @@ public final class WindowResizeApp: @unchecked Sendable {
         nativeDragState = nil
         consumedMouseDown = nil
         dragDetected = false
+        hideSynthesizedPointer()
+    }
+
+    private func showSynthesizedPointer(at point: CGPoint) {
+        guard let synthesizedPointerOverlay else {
+            return
+        }
+
+        DispatchQueue.main.async {
+            synthesizedPointerOverlay.show(at: point)
+        }
+    }
+
+    private func hideSynthesizedPointer() {
+        guard let synthesizedPointerOverlay else {
+            return
+        }
+
+        DispatchQueue.main.async {
+            synthesizedPointerOverlay.hide()
+        }
     }
 
     private func windowElement(at point: CGPoint) -> AXUIElement? {
