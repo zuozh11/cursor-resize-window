@@ -11,6 +11,9 @@ struct ResizeDirection: OptionSet, Equatable {
 }
 
 enum ResizeTarget: CaseIterable, Equatable {
+    static let middleBandMin: CGFloat = 3.0 / 8.0
+    static let middleBandMax: CGFloat = 5.0 / 8.0
+
     case move
     case left
     case right
@@ -24,8 +27,8 @@ enum ResizeTarget: CaseIterable, Equatable {
     static func from(point: CGPoint, frame: CGRect) -> ResizeTarget {
         let u = (point.x - frame.minX) / frame.width
         let v = (point.y - frame.minY) / frame.height
-        let isInMiddleColumn = (frame.minX + frame.width / 3.0)...(frame.maxX - frame.width / 3.0) ~= point.x
-        let isInMiddleRow = (frame.minY + frame.height / 3.0)...(frame.maxY - frame.height / 3.0) ~= point.y
+        let isInMiddleColumn = middleBandMin...middleBandMax ~= u
+        let isInMiddleRow = middleBandMin...middleBandMax ~= v
 
         if isInMiddleRow && !isInMiddleColumn {
             return u < 0.5 ? .left : .right
@@ -106,6 +109,9 @@ struct NativeDragMapping: Equatable {
     private static let edgeInset: CGFloat = 2
     private static let cornerInset: CGFloat = 5
     private static let titleBarInset: CGFloat = 3
+    private static let horizontalDisplayInset: CGFloat = 20
+    private static let topDisplayInset: CGFloat = 20
+    private static let bottomDisplayInset: CGFloat = 8
 
     let anchor: CGPoint
     private let target: ResizeTarget
@@ -161,7 +167,25 @@ struct NativeDragMapping: Equatable {
         }
     }
 
+    func translate(_ point: CGPoint, constrainedTo bounds: CGRect) -> CGPoint {
+        let translated = translate(point)
+        return CGPoint(
+            x: min(
+                max(translated.x, bounds.minX + Self.horizontalDisplayInset),
+                bounds.maxX - Self.horizontalDisplayInset
+            ),
+            y: min(
+                max(translated.y, bounds.minY + Self.topDisplayInset),
+                bounds.maxY - Self.bottomDisplayInset
+            )
+        )
+    }
+
+    func clickableDisplay(in bounds: [CGRect]) -> CGRect? {
+        bounds.first { $0.contains(pointer) && $0.contains(anchor) }
+    }
+
     func isClickable(in bounds: [CGRect]) -> Bool {
-        bounds.contains { $0.contains(pointer) && $0.contains(anchor) }
+        clickableDisplay(in: bounds) != nil
     }
 }

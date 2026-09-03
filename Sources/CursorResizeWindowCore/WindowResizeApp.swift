@@ -1,4 +1,5 @@
 @preconcurrency import ApplicationServices
+@preconcurrency import AppKit
 @preconcurrency import CoreGraphics
 import Darwin
 import Foundation
@@ -25,10 +26,15 @@ public final class WindowResizeApp: @unchecked Sendable {
     private var consumedMouseDown: CGEvent?
     private var dragDetected = false
     private var nativeDragState: NativeDragState?
+    private var dragFeedbackOverlay: DragFeedbackOverlay?
 
     public init() {}
 
+    @MainActor
     public func run() throws {
+        let application = NSApplication.shared
+        application.setActivationPolicy(.accessory)
+
         let promptOptions = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
         guard AXIsProcessTrustedWithOptions(promptOptions) else {
             throw RuntimeError.accessibilityPermissionRequired
@@ -57,16 +63,18 @@ public final class WindowResizeApp: @unchecked Sendable {
         }
 
         eventTap = tap
+        dragFeedbackOverlay = DragFeedbackOverlay()
         let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
         CFRunLoopAddSource(CFRunLoopGetCurrent(), source, .commonModes)
         CGEvent.tapEnable(tap: tap, enable: true)
 
         print("cursor-resize-window: running with ctrl")
-        CFRunLoopRun()
+        application.run()
     }
 
     fileprivate func handle(_ type: CGEventType, event: CGEvent, proxy: CGEventTapProxy) -> Unmanaged<CGEvent>? {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+            hideSynthesizedPointer()
             if let eventTap {
                 CGEvent.tapEnable(tap: eventTap, enable: true)
             }
@@ -89,7 +97,7 @@ public final class WindowResizeApp: @unchecked Sendable {
             if nativeDragState != nil {
                 return applyNativeResize(to: event)
             }
-            applyAccessibilityResize(to: event.location)
+            applyAccessibilityDrag(to: event.location)
             return nil
         case .leftMouseUp:
             guard dragState != nil || nativeDragState != nil else {
@@ -106,7 +114,7 @@ public final class WindowResizeApp: @unchecked Sendable {
                 finishDrag()
                 return rewrittenEvent
             }
-            applyAccessibilityResize(to: event.location)
+            applyAccessibilityDrag(to: event.location)
             finishDrag()
             return nil
         default:
@@ -123,15 +131,34 @@ public final class WindowResizeApp: @unchecked Sendable {
         }
 
         let target = ResizeTarget.from(point: point, frame: frame)
-        let nativeMapping = NativeDragMapping(pointer: point, frame: frame, target: target)
-        if nativeMapping.isClickable(in: activeDisplayBounds()) {
-            nativeDragState = NativeDragState(window: window, mapping: nativeMapping)
-        } else if let resizeDirection = target.resizeDirection {
+        if target == .move {
             dragState = DragState(
                 window: window,
                 downLocation: point,
                 frame: frame,
-                direction: resizeDirection
+                target: target
+            )
+            frameApplier.beginDrag(for: window, initialFrame: frame)
+            beginDragFeedback(at: point, windowFrame: frame, target: target)
+            return true
+        }
+
+        let nativeMapping = NativeDragMapping(pointer: point, frame: frame, target: target)
+        if let displayBounds = nativeMapping.clickableDisplay(in: activeDisplayBounds()) {
+            nativeDragState = NativeDragState(
+                window: window,
+                mapping: nativeMapping,
+                displayBounds: displayBounds,
+                frame: frame,
+                target: target
+            )
+            beginDragFeedback(at: nativeMapping.anchor, windowFrame: frame, target: target)
+        } else if target.resizeDirection != nil {
+            dragState = DragState(
+                window: window,
+                downLocation: point,
+                frame: frame,
+                target: target
             )
             frameApplier.beginDrag(for: window, initialFrame: frame)
         } else {
@@ -141,20 +168,26 @@ public final class WindowResizeApp: @unchecked Sendable {
     }
 
     private func activeDisplayBounds() -> [CGRect] {
-        var displayCount: UInt32 = 0
-        guard CGGetActiveDisplayList(0, nil, &displayCount) == .success else {
-            return []
-        }
+        MainActor.assumeIsolated {
+            let screens = NSScreen.screens
+            guard let primaryScreen = screens.first else {
+                return []
+            }
 
-        var displays = [CGDirectDisplayID](repeating: 0, count: Int(displayCount))
-        guard CGGetActiveDisplayList(displayCount, &displays, &displayCount) == .success else {
-            return []
+            let flipReference = primaryScreen.frame.maxY
+            return screens.map { screen in
+                let visibleFrame = screen.visibleFrame
+                return CGRect(
+                    x: visibleFrame.minX,
+                    y: flipReference - visibleFrame.maxY,
+                    width: visibleFrame.width,
+                    height: visibleFrame.height
+                )
+            }
         }
-
-        return displays.prefix(Int(displayCount)).map(CGDisplayBounds)
     }
 
-    private func applyAccessibilityResize(to point: CGPoint) {
+    private func applyAccessibilityDrag(to point: CGPoint) {
         guard let dragState else {
             return
         }
@@ -165,12 +198,19 @@ public final class WindowResizeApp: @unchecked Sendable {
             return
         }
 
-        let frame = ResizeModel.resize(
-            frame: dragState.frame,
-            direction: dragState.direction,
-            dx: dx,
-            dy: dy
-        )
+        let frame: CGRect
+        if dragState.target == .move {
+            frame = dragState.frame.offsetBy(dx: dx, dy: dy)
+        } else if let direction = dragState.target.resizeDirection {
+            frame = ResizeModel.resize(
+                frame: dragState.frame,
+                direction: direction,
+                dx: dx,
+                dy: dy
+            )
+        } else {
+            return
+        }
 
         if frame != dragState.frame {
             frameApplier.enqueue(window: dragState.window, frame: frame)
@@ -178,6 +218,9 @@ public final class WindowResizeApp: @unchecked Sendable {
 
         dragState.downLocation = point
         dragState.frame = frame
+        if dragState.target == .move {
+            updateDragFeedback(at: point, windowFrame: frame)
+        }
     }
 
     private func applyNativeResize(to event: CGEvent) -> Unmanaged<CGEvent>? {
@@ -192,8 +235,10 @@ public final class WindowResizeApp: @unchecked Sendable {
             event.type = .leftMouseDown
             event.location = nativeDragState.mapping.anchor
         } else {
-            event.location = nativeDragState.mapping.translate(event.location)
+            event.location = nativeDragState.translate(event.location)
         }
+        let previewFrame = nativeDragState.updatePreviewFrame(for: event.location)
+        updateDragFeedback(at: event.location, windowFrame: previewFrame)
         return Unmanaged.passUnretained(event)
     }
 
@@ -203,7 +248,8 @@ public final class WindowResizeApp: @unchecked Sendable {
         }
 
         event.flags.remove(.maskControl)
-        event.location = nativeDragState.mapping.translate(event.location)
+        event.location = nativeDragState.translate(event.location)
+        showSynthesizedPointer(at: event.location)
         return Unmanaged.passUnretained(event)
     }
 
@@ -215,6 +261,47 @@ public final class WindowResizeApp: @unchecked Sendable {
         nativeDragState = nil
         consumedMouseDown = nil
         dragDetected = false
+        hideSynthesizedPointer()
+    }
+
+    private func showSynthesizedPointer(at point: CGPoint) {
+        guard let dragFeedbackOverlay else {
+            return
+        }
+
+        DispatchQueue.main.async {
+            dragFeedbackOverlay.showPointer(at: point)
+        }
+    }
+
+    private func updateDragFeedback(at point: CGPoint, windowFrame: CGRect) {
+        guard let dragFeedbackOverlay else {
+            return
+        }
+
+        DispatchQueue.main.async {
+            dragFeedbackOverlay.update(at: point, windowFrame: windowFrame)
+        }
+    }
+
+    private func hideSynthesizedPointer() {
+        guard let dragFeedbackOverlay else {
+            return
+        }
+
+        DispatchQueue.main.async {
+            dragFeedbackOverlay.hide()
+        }
+    }
+
+    private func beginDragFeedback(at point: CGPoint, windowFrame: CGRect, target: ResizeTarget) {
+        guard let dragFeedbackOverlay else {
+            return
+        }
+
+        DispatchQueue.main.async {
+            dragFeedbackOverlay.begin(at: point, windowFrame: windowFrame, target: target)
+        }
     }
 
     private func windowElement(at point: CGPoint) -> AXUIElement? {
@@ -362,11 +449,48 @@ public final class WindowResizeApp: @unchecked Sendable {
 private final class NativeDragState {
     let window: AXUIElement
     let mapping: NativeDragMapping
+    private let displayBounds: CGRect
+    private let target: ResizeTarget
+    private var synthesizedPointer: CGPoint
+    private var previewFrame: CGRect
     var needsMouseDown = true
 
-    init(window: AXUIElement, mapping: NativeDragMapping) {
+    init(
+        window: AXUIElement,
+        mapping: NativeDragMapping,
+        displayBounds: CGRect,
+        frame: CGRect,
+        target: ResizeTarget
+    ) {
         self.window = window
         self.mapping = mapping
+        self.displayBounds = displayBounds
+        synthesizedPointer = mapping.anchor
+        previewFrame = frame
+        self.target = target
+    }
+
+    func translate(_ point: CGPoint) -> CGPoint {
+        mapping.translate(point, constrainedTo: displayBounds)
+    }
+
+    func updatePreviewFrame(for nextSynthesizedPointer: CGPoint) -> CGRect {
+        let dx = nextSynthesizedPointer.x - synthesizedPointer.x
+        let dy = nextSynthesizedPointer.y - synthesizedPointer.y
+
+        if target == .move {
+            previewFrame = previewFrame.offsetBy(dx: dx, dy: dy)
+        } else if let direction = target.resizeDirection {
+            previewFrame = ResizeModel.resize(
+                frame: previewFrame,
+                direction: direction,
+                dx: dx,
+                dy: dy
+            )
+        }
+
+        synthesizedPointer = nextSynthesizedPointer
+        return previewFrame
     }
 }
 
@@ -374,18 +498,18 @@ private final class DragState: @unchecked Sendable {
     let window: AXUIElement
     var downLocation: CGPoint
     var frame: CGRect
-    let direction: ResizeDirection
+    let target: ResizeTarget
 
     init(
         window: AXUIElement,
         downLocation: CGPoint,
         frame: CGRect,
-        direction: ResizeDirection
+        target: ResizeTarget
     ) {
         self.window = window
         self.downLocation = downLocation
         self.frame = frame
-        self.direction = direction
+        self.target = target
     }
 }
 
