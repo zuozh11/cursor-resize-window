@@ -97,7 +97,7 @@ public final class WindowResizeApp: @unchecked Sendable {
             if nativeDragState != nil {
                 return applyNativeResize(to: event)
             }
-            applyAccessibilityResize(to: event.location)
+            applyAccessibilityDrag(to: event.location)
             return nil
         case .leftMouseUp:
             guard dragState != nil || nativeDragState != nil else {
@@ -114,7 +114,7 @@ public final class WindowResizeApp: @unchecked Sendable {
                 finishDrag()
                 return rewrittenEvent
             }
-            applyAccessibilityResize(to: event.location)
+            applyAccessibilityDrag(to: event.location)
             finishDrag()
             return nil
         default:
@@ -131,6 +131,18 @@ public final class WindowResizeApp: @unchecked Sendable {
         }
 
         let target = ResizeTarget.from(point: point, frame: frame)
+        if target == .move {
+            dragState = DragState(
+                window: window,
+                downLocation: point,
+                frame: frame,
+                target: target
+            )
+            frameApplier.beginDrag(for: window, initialFrame: frame)
+            beginDragFeedback(at: point, windowFrame: frame, target: target)
+            return true
+        }
+
         let nativeMapping = NativeDragMapping(pointer: point, frame: frame, target: target)
         if let displayBounds = nativeMapping.clickableDisplay(in: activeDisplayBounds()) {
             nativeDragState = NativeDragState(
@@ -141,12 +153,12 @@ public final class WindowResizeApp: @unchecked Sendable {
                 target: target
             )
             beginDragFeedback(at: nativeMapping.anchor, windowFrame: frame, target: target)
-        } else if let resizeDirection = target.resizeDirection {
+        } else if target.resizeDirection != nil {
             dragState = DragState(
                 window: window,
                 downLocation: point,
                 frame: frame,
-                direction: resizeDirection
+                target: target
             )
             frameApplier.beginDrag(for: window, initialFrame: frame)
         } else {
@@ -175,7 +187,7 @@ public final class WindowResizeApp: @unchecked Sendable {
         }
     }
 
-    private func applyAccessibilityResize(to point: CGPoint) {
+    private func applyAccessibilityDrag(to point: CGPoint) {
         guard let dragState else {
             return
         }
@@ -186,12 +198,19 @@ public final class WindowResizeApp: @unchecked Sendable {
             return
         }
 
-        let frame = ResizeModel.resize(
-            frame: dragState.frame,
-            direction: dragState.direction,
-            dx: dx,
-            dy: dy
-        )
+        let frame: CGRect
+        if dragState.target == .move {
+            frame = dragState.frame.offsetBy(dx: dx, dy: dy)
+        } else if let direction = dragState.target.resizeDirection {
+            frame = ResizeModel.resize(
+                frame: dragState.frame,
+                direction: direction,
+                dx: dx,
+                dy: dy
+            )
+        } else {
+            return
+        }
 
         if frame != dragState.frame {
             frameApplier.enqueue(window: dragState.window, frame: frame)
@@ -199,6 +218,9 @@ public final class WindowResizeApp: @unchecked Sendable {
 
         dragState.downLocation = point
         dragState.frame = frame
+        if dragState.target == .move {
+            updateDragFeedback(at: point, windowFrame: frame)
+        }
     }
 
     private func applyNativeResize(to event: CGEvent) -> Unmanaged<CGEvent>? {
@@ -476,18 +498,18 @@ private final class DragState: @unchecked Sendable {
     let window: AXUIElement
     var downLocation: CGPoint
     var frame: CGRect
-    let direction: ResizeDirection
+    let target: ResizeTarget
 
     init(
         window: AXUIElement,
         downLocation: CGPoint,
         frame: CGRect,
-        direction: ResizeDirection
+        target: ResizeTarget
     ) {
         self.window = window
         self.downLocation = downLocation
         self.frame = frame
-        self.direction = direction
+        self.target = target
     }
 }
 

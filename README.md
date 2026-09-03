@@ -25,7 +25,7 @@ A red dot tracks the rewritten mouse position that macOS receives during native 
 
 The middle quarter of each axis forms a cross-shaped region: the left and right arms resize width, while the top and bottom arms resize height. The four outer corner regions resize both axes. Dragging from the center intersection moves the window freely in any direction.
 
-The utility redirects the drag to the selected macOS resize edge, corner, or title bar so Window Server performs the operation whenever that target is in the same display's visible area as the pointer. Rewritten mouse positions stay 20 points inside the visible area's top, left, and right edges and 8 points inside its bottom edge, avoiding the menu bar, Dock, and edge-triggered window tools. If a resize target is outside the visible area or on another display, it falls back to updating the window frame through the Accessibility API. Moving is native-only, so a center drag is left untouched when its title-bar target is not clickable on the pointer's display.
+The utility redirects resize drags to the selected macOS edge or corner so Window Server performs the operation whenever that target is in the same display's visible area as the pointer. Rewritten mouse positions stay 20 points inside the visible area's top, left, and right edges and 8 points inside its bottom edge, avoiding the menu bar, Dock, and edge-triggered window tools. If a resize target is outside the visible area or on another display, it falls back to updating the window frame through the Accessibility API. Center drags always move the window through Accessibility frame updates so macOS does not restore a near-maximized window using the physical cursor position.
 
 ## Service Commands
 
