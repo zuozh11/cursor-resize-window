@@ -137,19 +137,21 @@ private final class ResizeRegionPreviewView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
 
-        let cellWidth = bounds.width / 3
-        let cellHeight = bounds.height / 3
+        let leftWidth = bounds.width * ResizeTarget.middleBandMin
+        let middleWidth = bounds.width * (ResizeTarget.middleBandMax - ResizeTarget.middleBandMin)
+        let bottomHeight = bounds.height * ResizeTarget.middleBandMin
+        let middleHeight = bounds.height * (ResizeTarget.middleBandMax - ResizeTarget.middleBandMin)
         let middleColumn = NSRect(
-            x: cellWidth,
+            x: leftWidth,
             y: 0,
-            width: cellWidth,
+            width: middleWidth,
             height: bounds.height
         )
         let middleRow = NSRect(
             x: 0,
-            y: cellHeight,
+            y: bottomHeight,
             width: bounds.width,
-            height: cellHeight
+            height: middleHeight
         )
 
         NSColor.controlAccentColor.withAlphaComponent(0.12).setFill()
@@ -157,18 +159,23 @@ private final class ResizeRegionPreviewView: NSView {
         middleRow.fill()
 
         NSColor.systemRed.withAlphaComponent(0.28).setFill()
-        targetRect(cellWidth: cellWidth, cellHeight: cellHeight).fill()
+        targetRect(
+            leftWidth: leftWidth,
+            middleWidth: middleWidth,
+            bottomHeight: bottomHeight,
+            middleHeight: middleHeight
+        ).fill()
 
         let grid = NSBezierPath()
         grid.lineWidth = 1
-        grid.move(to: NSPoint(x: cellWidth, y: 0))
-        grid.line(to: NSPoint(x: cellWidth, y: bounds.height))
-        grid.move(to: NSPoint(x: cellWidth * 2, y: 0))
-        grid.line(to: NSPoint(x: cellWidth * 2, y: bounds.height))
-        grid.move(to: NSPoint(x: 0, y: cellHeight))
-        grid.line(to: NSPoint(x: bounds.width, y: cellHeight))
-        grid.move(to: NSPoint(x: 0, y: cellHeight * 2))
-        grid.line(to: NSPoint(x: bounds.width, y: cellHeight * 2))
+        grid.move(to: NSPoint(x: leftWidth, y: 0))
+        grid.line(to: NSPoint(x: leftWidth, y: bounds.height))
+        grid.move(to: NSPoint(x: leftWidth + middleWidth, y: 0))
+        grid.line(to: NSPoint(x: leftWidth + middleWidth, y: bounds.height))
+        grid.move(to: NSPoint(x: 0, y: bottomHeight))
+        grid.line(to: NSPoint(x: bounds.width, y: bottomHeight))
+        grid.move(to: NSPoint(x: 0, y: bottomHeight + middleHeight))
+        grid.line(to: NSPoint(x: bounds.width, y: bottomHeight + middleHeight))
         NSColor.white.withAlphaComponent(0.72).setStroke()
         grid.stroke()
 
@@ -178,36 +185,36 @@ private final class ResizeRegionPreviewView: NSView {
         border.stroke()
     }
 
-    private func targetRect(cellWidth: CGFloat, cellHeight: CGFloat) -> NSRect {
-        let column: CGFloat
-        let row: CGFloat
+    private func targetRect(
+        leftWidth: CGFloat,
+        middleWidth: CGFloat,
+        bottomHeight: CGFloat,
+        middleHeight: CGFloat
+    ) -> NSRect {
+        let rightOrigin = leftWidth + middleWidth
+        let topOrigin = bottomHeight + middleHeight
+        let rightWidth = bounds.width - rightOrigin
+        let topHeight = bounds.height - topOrigin
 
         switch target {
         case .leftTop:
-            (column, row) = (0, 2)
+            return NSRect(x: 0, y: topOrigin, width: leftWidth, height: topHeight)
         case .top:
-            (column, row) = (1, 2)
+            return NSRect(x: leftWidth, y: topOrigin, width: middleWidth, height: topHeight)
         case .rightTop:
-            (column, row) = (2, 2)
+            return NSRect(x: rightOrigin, y: topOrigin, width: rightWidth, height: topHeight)
         case .left:
-            (column, row) = (0, 1)
+            return NSRect(x: 0, y: bottomHeight, width: leftWidth, height: middleHeight)
         case .move:
-            (column, row) = (1, 1)
+            return NSRect(x: leftWidth, y: bottomHeight, width: middleWidth, height: middleHeight)
         case .right:
-            (column, row) = (2, 1)
+            return NSRect(x: rightOrigin, y: bottomHeight, width: rightWidth, height: middleHeight)
         case .leftBottom:
-            (column, row) = (0, 0)
+            return NSRect(x: 0, y: 0, width: leftWidth, height: bottomHeight)
         case .bottom:
-            (column, row) = (1, 0)
+            return NSRect(x: leftWidth, y: 0, width: middleWidth, height: bottomHeight)
         case .rightBottom:
-            (column, row) = (2, 0)
+            return NSRect(x: rightOrigin, y: 0, width: rightWidth, height: bottomHeight)
         }
-
-        return NSRect(
-            x: column * cellWidth,
-            y: row * cellHeight,
-            width: cellWidth,
-            height: cellHeight
-        )
     }
 }

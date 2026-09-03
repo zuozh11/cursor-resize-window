@@ -11,6 +11,9 @@ struct ResizeDirection: OptionSet, Equatable {
 }
 
 enum ResizeTarget: CaseIterable, Equatable {
+    static let middleBandMin: CGFloat = 3.0 / 8.0
+    static let middleBandMax: CGFloat = 5.0 / 8.0
+
     case move
     case left
     case right
@@ -24,8 +27,8 @@ enum ResizeTarget: CaseIterable, Equatable {
     static func from(point: CGPoint, frame: CGRect) -> ResizeTarget {
         let u = (point.x - frame.minX) / frame.width
         let v = (point.y - frame.minY) / frame.height
-        let isInMiddleColumn = (frame.minX + frame.width / 3.0)...(frame.maxX - frame.width / 3.0) ~= point.x
-        let isInMiddleRow = (frame.minY + frame.height / 3.0)...(frame.maxY - frame.height / 3.0) ~= point.y
+        let isInMiddleColumn = middleBandMin...middleBandMax ~= u
+        let isInMiddleRow = middleBandMin...middleBandMax ~= v
 
         if isInMiddleRow && !isInMiddleColumn {
             return u < 0.5 ? .left : .right

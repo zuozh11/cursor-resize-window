@@ -26,18 +26,18 @@ final class ResizeModelTests: XCTestCase {
         XCTAssertEqual(target(x: 0.5, y: 0.5), .move)
     }
 
-    func testIncludesThirdBoundariesInCross() {
-        XCTAssertEqual(target(x: 1.0 / 3.0, y: 0.1), .top)
-        XCTAssertEqual(target(x: 2.0 / 3.0, y: 0.1), .top)
-        XCTAssertEqual(target(x: 0.1, y: 1.0 / 3.0), .left)
-        XCTAssertEqual(target(x: 0.1, y: 2.0 / 3.0), .left)
-        XCTAssertEqual(target(x: 1.0 / 3.0, y: 1.0 / 3.0), .move)
-        XCTAssertEqual(target(x: 2.0 / 3.0, y: 2.0 / 3.0), .move)
+    func testIncludesQuarterBandBoundariesInCross() {
+        XCTAssertEqual(target(x: 3.0 / 8.0, y: 0.1), .top)
+        XCTAssertEqual(target(x: 5.0 / 8.0, y: 0.1), .top)
+        XCTAssertEqual(target(x: 0.1, y: 3.0 / 8.0), .left)
+        XCTAssertEqual(target(x: 0.1, y: 5.0 / 8.0), .left)
+        XCTAssertEqual(target(x: 3.0 / 8.0, y: 3.0 / 8.0), .move)
+        XCTAssertEqual(target(x: 5.0 / 8.0, y: 5.0 / 8.0), .move)
     }
 
-    func testIncludesExactThirdBoundaryForNegativeNonDivisibleFrame() {
+    func testIncludesExactQuarterBandBoundaryForNegativeNonDivisibleFrame() {
         let frame = CGRect(x: -1000, y: 200, width: 50, height: 50)
-        let point = CGPoint(x: frame.minX + frame.width / 3.0, y: frame.minY + 5)
+        let point = CGPoint(x: frame.minX + frame.width * 3.0 / 8.0, y: frame.minY + 5)
 
         XCTAssertEqual(ResizeTarget.from(point: point, frame: frame), .top)
     }
