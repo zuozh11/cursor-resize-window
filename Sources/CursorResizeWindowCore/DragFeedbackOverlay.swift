@@ -5,6 +5,9 @@ final class DragFeedbackOverlay {
     private static let dotSize: CGFloat = 12
 
     private let dotPanel: NSPanel
+    private let cursorPanel: NSPanel
+    private let dotView: NSView
+    private let cursorImageView: NSImageView
     private let regionPanel: NSPanel
     private let regionView: ResizeRegionPreviewView
 
@@ -18,7 +21,7 @@ final class DragFeedbackOverlay {
             )
         )
 
-        let dot = NSView(
+        dotView = NSView(
             frame: NSRect(
                 x: 0,
                 y: 0,
@@ -26,12 +29,16 @@ final class DragFeedbackOverlay {
                 height: Self.dotSize
             )
         )
-        dot.wantsLayer = true
-        dot.layer?.cornerRadius = Self.dotSize / 2
-        dot.layer?.backgroundColor = NSColor.systemRed.cgColor
-        dot.layer?.borderColor = NSColor.white.cgColor
-        dot.layer?.borderWidth = 2
-        dotPanel.contentView = dot
+        dotView.wantsLayer = true
+        dotView.layer?.cornerRadius = Self.dotSize / 2
+        dotView.layer?.backgroundColor = NSColor.systemRed.cgColor
+        dotView.layer?.borderColor = NSColor.white.cgColor
+        dotView.layer?.borderWidth = 2
+        dotPanel.contentView = dotView
+
+        cursorPanel = Self.makePanel(frame: .zero)
+        cursorImageView = NSImageView(frame: .zero)
+        cursorPanel.contentView = cursorImageView
 
         regionPanel = Self.makePanel(frame: .zero)
         regionView = ResizeRegionPreviewView(frame: .zero)
@@ -51,16 +58,15 @@ final class DragFeedbackOverlay {
     }
 
     func showPointer(at point: CGPoint) {
-        guard let primaryScreen = NSScreen.screens.first else {
-            hide()
+        guard let appKitPoint = appKitPoint(from: point) else {
+            hideDot()
             return
         }
 
-        let appKitY = primaryScreen.frame.maxY - point.y
         dotPanel.setFrame(
             NSRect(
                 x: point.x - Self.dotSize / 2,
-                y: appKitY - Self.dotSize / 2,
+                y: appKitPoint.y - Self.dotSize / 2,
                 width: Self.dotSize,
                 height: Self.dotSize
             ),
@@ -72,16 +78,55 @@ final class DragFeedbackOverlay {
         }
     }
 
-    func hide() {
+    func showShadowCursor(at point: CGPoint, image: NSImage, hotSpot: CGPoint) {
+        guard let appKitPoint = appKitPoint(from: point) else {
+            hideShadowCursor()
+            return
+        }
+
+        cursorImageView.image = image
+        cursorImageView.imageScaling = .scaleNone
+        cursorImageView.frame = NSRect(origin: .zero, size: image.size)
+        cursorPanel.setFrame(
+            NSRect(
+                x: point.x - hotSpot.x,
+                y: appKitPoint.y - image.size.height + hotSpot.y,
+                width: image.size.width,
+                height: image.size.height
+            ),
+            display: false
+        )
+
+        if !cursorPanel.isVisible {
+            cursorPanel.orderFrontRegardless()
+        }
+    }
+
+    func hide(keepingShadowCursor: Bool = false) {
         if regionPanel.isVisible {
             regionPanel.orderOut(nil)
         }
         if dotPanel.isVisible {
             dotPanel.orderOut(nil)
         }
+        if !keepingShadowCursor {
+            hideShadowCursor()
+        }
     }
 
-    private func updateRegionFrame(_ windowFrame: CGRect) {
+    func hideShadowCursor() {
+        if cursorPanel.isVisible {
+            cursorPanel.orderOut(nil)
+        }
+    }
+
+    private func hideDot() {
+        if dotPanel.isVisible {
+            dotPanel.orderOut(nil)
+        }
+    }
+
+    func updateRegionFrame(_ windowFrame: CGRect) {
         guard let regionFrame = appKitFrame(from: windowFrame) else {
             return
         }
@@ -100,6 +145,14 @@ final class DragFeedbackOverlay {
             width: frame.width,
             height: frame.height
         )
+    }
+
+    private func appKitPoint(from point: CGPoint) -> CGPoint? {
+        guard let primaryScreen = NSScreen.screens.first else {
+            return nil
+        }
+
+        return CGPoint(x: point.x, y: primaryScreen.frame.maxY - point.y)
     }
 
     private static func makePanel(frame: NSRect) -> NSPanel {

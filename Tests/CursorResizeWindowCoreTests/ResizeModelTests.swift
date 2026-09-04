@@ -63,7 +63,7 @@ final class ResizeModelTests: XCTestCase {
     func testMapsEveryTargetToNativeAnchor() {
         let pointer = CGPoint(x: 250, y: 350)
         let expected: [ResizeTarget: CGPoint] = [
-            .move: CGPoint(x: 250, y: 203),
+            .move: CGPoint(x: 250, y: 206),
             .left: CGPoint(x: 102, y: 350),
             .right: CGPoint(x: 398, y: 350),
             .top: CGPoint(x: 250, y: 202),
@@ -118,7 +118,28 @@ final class ResizeModelTests: XCTestCase {
     func testTranslatesNativeMoveEventsOnBothAxes() {
         let mapping = NativeDragMapping(pointer: CGPoint(x: 250, y: 350), frame: frame, target: .move)
 
-        XCTAssertEqual(mapping.translate(CGPoint(x: 270, y: 380)), CGPoint(x: 270, y: 233))
+        XCTAssertEqual(mapping.translate(CGPoint(x: 270, y: 380)), CGPoint(x: 270, y: 236))
+    }
+
+    func testUsesWindowCenterAsStableNativeMoveAnchor() {
+        let mapping = NativeDragMapping(pointer: CGPoint(x: 150, y: 350), frame: frame, target: .move)
+
+        XCTAssertEqual(mapping.anchor, CGPoint(x: frame.midX, y: frame.minY + 6))
+        XCTAssertEqual(mapping.visiblePointer(for: mapping.anchor), CGPoint(x: 150, y: 350))
+    }
+
+    func testKeepsVisiblePointerAtOriginalOffsetFromNativeMoveAnchor() {
+        let mapping = NativeDragMapping(pointer: CGPoint(x: 250, y: 350), frame: frame, target: .move)
+
+        XCTAssertEqual(mapping.visiblePointer(for: mapping.anchor), CGPoint(x: 250, y: 350))
+        XCTAssertEqual(mapping.visiblePointer(for: CGPoint(x: 270, y: 236)), CGPoint(x: 270, y: 380))
+    }
+
+    func testDistinguishesPreWarpAndPostWarpEventCoordinates() {
+        let mapping = NativeDragMapping(pointer: CGPoint(x: 150, y: 350), frame: frame, target: .move)
+
+        XCTAssertFalse(mapping.isInWarpedCoordinateSpace(CGPoint(x: 170, y: 370)))
+        XCTAssertTrue(mapping.isInWarpedCoordinateSpace(CGPoint(x: 270, y: 226)))
     }
 
     func testLocksUnrelatedAxisForNativeEdgeResizeEvents() {
@@ -159,15 +180,92 @@ final class ResizeModelTests: XCTestCase {
 
         XCTAssertEqual(
             top.translate(CGPoint(x: 250, y: 0), constrainedTo: display),
-            CGPoint(x: 250, y: 20)
+            CGPoint(x: 250, y: 10)
         )
         XCTAssertEqual(
             right.translate(CGPoint(x: 1200, y: 350), constrainedTo: display),
-            CGPoint(x: 980, y: 350)
+            CGPoint(x: 990, y: 350)
         )
         XCTAssertEqual(
             bottom.translate(CGPoint(x: 250, y: 900), constrainedTo: display),
-            CGPoint(x: 250, y: 792)
+            CGPoint(x: 250, y: 790)
+        )
+    }
+
+    func testKeepsWarpedNativeResizeEventsOnTargetAxisAndInsideSafeArea() {
+        let display = CGRect(x: 0, y: 0, width: 1000, height: 800)
+        let left = NativeDragMapping(
+            pointer: CGPoint(x: 150, y: 350),
+            frame: frame,
+            target: .left
+        )
+        let top = NativeDragMapping(
+            pointer: CGPoint(x: 250, y: 250),
+            frame: frame,
+            target: .top
+        )
+        let rightBottom = NativeDragMapping(
+            pointer: CGPoint(x: 350, y: 450),
+            frame: frame,
+            target: .rightBottom
+        )
+
+        XCTAssertEqual(
+            left.constrainWarpedPointer(CGPoint(x: 0, y: 700), to: display),
+            CGPoint(x: 10, y: 350)
+        )
+        XCTAssertEqual(
+            top.constrainWarpedPointer(CGPoint(x: 700, y: 0), to: display),
+            CGPoint(x: 250, y: 10)
+        )
+        XCTAssertEqual(
+            rightBottom.constrainWarpedPointer(CGPoint(x: 1200, y: 900), to: display),
+            CGPoint(x: 987, y: 787)
+        )
+    }
+
+    func testDoesNotConstrainNativeMoveEventsToDisplaySafeArea() {
+        let display = CGRect(x: 0, y: 0, width: 1000, height: 800)
+        let mapping = NativeDragMapping(
+            pointer: CGPoint(x: 250, y: 350),
+            frame: frame,
+            target: .move
+        )
+
+        XCTAssertEqual(
+            mapping.translate(CGPoint(x: 10, y: 163), constrainedToAny: [display]),
+            CGPoint(x: 10, y: 19)
+        )
+    }
+
+    func testConstrainsNativeMoveEventsToAllScreenBounds() {
+        let displays = [
+            CGRect(x: 0, y: 0, width: 1000, height: 800),
+            CGRect(x: 1000, y: 0, width: 1000, height: 800)
+        ]
+        let mapping = NativeDragMapping(
+            pointer: CGPoint(x: 250, y: 350),
+            frame: frame,
+            target: .move
+        )
+
+        XCTAssertEqual(
+            mapping.translate(CGPoint(x: 2100, y: 350), constrainedToAny: displays),
+            CGPoint(x: 2000, y: 206)
+        )
+    }
+
+    func testKeepsNativeMoveWindowEdgeEightPointsBelowScreenTop() {
+        let display = CGRect(x: 0, y: 0, width: 1000, height: 800)
+        let mapping = NativeDragMapping(
+            pointer: CGPoint(x: 250, y: 350),
+            frame: frame,
+            target: .move
+        )
+
+        XCTAssertEqual(
+            mapping.translate(CGPoint(x: 250, y: 150), constrainedToAny: [display]),
+            CGPoint(x: 250, y: 14)
         )
     }
 
