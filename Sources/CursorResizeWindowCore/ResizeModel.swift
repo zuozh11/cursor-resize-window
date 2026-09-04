@@ -109,10 +109,8 @@ struct NativeDragMapping: Equatable {
     private static let edgeInset: CGFloat = 2
     private static let cornerInset: CGFloat = 5
     private static let titleBarInset: CGFloat = 6
-    private static let horizontalDisplayInset: CGFloat = 20
-    private static let topDisplayInset: CGFloat = 20
-    private static let bottomDisplayInset: CGFloat = 8
-    private static let moveTopDisplayInset: CGFloat = 18
+    private static let windowDisplayInset: CGFloat = 8
+    private static let moveTopDisplayInset: CGFloat = windowDisplayInset + titleBarInset
 
     let anchor: CGPoint
     private let target: ResizeTarget
@@ -197,14 +195,24 @@ struct NativeDragMapping: Equatable {
     }
 
     private func constrainResizePointer(_ point: CGPoint, to bounds: CGRect) -> CGPoint {
+        let pointerInset: CGFloat
+        switch target {
+        case .leftTop, .rightTop, .leftBottom, .rightBottom:
+            pointerInset = Self.windowDisplayInset + Self.cornerInset
+        case .left, .right, .top, .bottom:
+            pointerInset = Self.windowDisplayInset + Self.edgeInset
+        case .move:
+            pointerInset = Self.windowDisplayInset
+        }
+
         return CGPoint(
             x: min(
-                max(point.x, bounds.minX + Self.horizontalDisplayInset),
-                bounds.maxX - Self.horizontalDisplayInset
+                max(point.x, bounds.minX + pointerInset),
+                bounds.maxX - pointerInset
             ),
             y: min(
-                max(point.y, bounds.minY + Self.topDisplayInset),
-                bounds.maxY - Self.bottomDisplayInset
+                max(point.y, bounds.minY + pointerInset),
+                bounds.maxY - pointerInset
             )
         )
     }
