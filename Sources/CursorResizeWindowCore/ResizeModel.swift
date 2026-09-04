@@ -108,10 +108,11 @@ enum ResizeModel {
 struct NativeDragMapping: Equatable {
     private static let edgeInset: CGFloat = 2
     private static let cornerInset: CGFloat = 5
-    private static let titleBarInset: CGFloat = 3
+    private static let titleBarInset: CGFloat = 6
     private static let horizontalDisplayInset: CGFloat = 20
     private static let topDisplayInset: CGFloat = 20
     private static let bottomDisplayInset: CGFloat = 8
+    private static let moveTopDisplayInset: CGFloat = 18
 
     let anchor: CGPoint
     private let target: ResizeTarget
@@ -123,7 +124,7 @@ struct NativeDragMapping: Equatable {
         self.pointer = pointer
         switch target {
         case .move:
-            anchor = CGPoint(x: pointer.x, y: frame.minY + Self.titleBarInset)
+            anchor = CGPoint(x: frame.midX, y: frame.minY + Self.titleBarInset)
         case .left:
             anchor = CGPoint(x: frame.minX + Self.edgeInset, y: pointer.y)
         case .right:
@@ -167,18 +168,80 @@ struct NativeDragMapping: Equatable {
         }
     }
 
+    func visiblePointer(for translatedPoint: CGPoint) -> CGPoint {
+        CGPoint(
+            x: translatedPoint.x - offset.x,
+            y: translatedPoint.y - offset.y
+        )
+    }
+
+    func isInWarpedCoordinateSpace(_ point: CGPoint) -> Bool {
+        squaredDistance(from: point, to: anchor) <= squaredDistance(from: point, to: pointer)
+    }
+
     func translate(_ point: CGPoint, constrainedTo bounds: CGRect) -> CGPoint {
-        let translated = translate(point)
+        constrainResizePointer(translate(point), to: bounds)
+    }
+
+    func constrainWarpedPointer(_ point: CGPoint, to bounds: CGRect) -> CGPoint {
+        let axisLockedPoint: CGPoint
+        switch target {
+        case .move, .leftTop, .rightTop, .leftBottom, .rightBottom:
+            axisLockedPoint = point
+        case .left, .right:
+            axisLockedPoint = CGPoint(x: point.x, y: anchor.y)
+        case .top, .bottom:
+            axisLockedPoint = CGPoint(x: anchor.x, y: point.y)
+        }
+        return constrainResizePointer(axisLockedPoint, to: bounds)
+    }
+
+    private func constrainResizePointer(_ point: CGPoint, to bounds: CGRect) -> CGPoint {
         return CGPoint(
             x: min(
-                max(translated.x, bounds.minX + Self.horizontalDisplayInset),
+                max(point.x, bounds.minX + Self.horizontalDisplayInset),
                 bounds.maxX - Self.horizontalDisplayInset
             ),
             y: min(
-                max(translated.y, bounds.minY + Self.topDisplayInset),
+                max(point.y, bounds.minY + Self.topDisplayInset),
                 bounds.maxY - Self.bottomDisplayInset
             )
         )
+    }
+
+    func translate(_ point: CGPoint, constrainedToAny bounds: [CGRect]) -> CGPoint {
+        constrain(translate(point), toAny: bounds)
+    }
+
+    func constrain(_ point: CGPoint, toAny bounds: [CGRect]) -> CGPoint {
+        let movementBounds = bounds.map { bounds in
+            CGRect(
+                x: bounds.minX,
+                y: bounds.minY + Self.moveTopDisplayInset,
+                width: bounds.width,
+                height: bounds.height - Self.moveTopDisplayInset
+            )
+        }
+        guard !movementBounds.contains(where: { $0.contains(point) }) else {
+            return point
+        }
+
+        return movementBounds
+            .map { bounds in
+                CGPoint(
+                    x: min(max(point.x, bounds.minX), bounds.maxX),
+                    y: min(max(point.y, bounds.minY), bounds.maxY)
+                )
+            }
+            .min { lhs, rhs in
+                squaredDistance(from: point, to: lhs) < squaredDistance(from: point, to: rhs)
+            } ?? point
+    }
+
+    private func squaredDistance(from lhs: CGPoint, to rhs: CGPoint) -> CGFloat {
+        let dx = lhs.x - rhs.x
+        let dy = lhs.y - rhs.y
+        return dx * dx + dy * dy
     }
 
     func clickableDisplay(in bounds: [CGRect]) -> CGRect? {
