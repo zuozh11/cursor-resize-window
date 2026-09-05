@@ -28,6 +28,7 @@ public final class WindowResizeApp: NSObject, NSApplicationDelegate, @unchecked 
     private var eventTap: CFMachPort?
     private var instanceLockFileDescriptor: Int32 = -1
     private let frameApplier = AXFrameApplier()
+    private let titleBarDragSettings = TitleBarDragSettings()
     private var dragState: DragState?
     private var consumedMouseDown: CGEvent?
     private var dragDetected = false
@@ -182,7 +183,14 @@ public final class WindowResizeApp: NSObject, NSApplicationDelegate, @unchecked 
         }
 
         let target = ResizeTarget.from(point: point, frame: frame)
-        let nativeMapping = NativeDragMapping(pointer: point, frame: frame, target: target)
+        let nativeMapping = NativeDragMapping(
+            pointer: point,
+            frame: frame,
+            target: target,
+            titleBarYOffset: target == .move
+                ? titleBarYOffset(for: window)
+                : NativeDragMapping.defaultTitleBarYOffset
+        )
         if let displayBounds = nativeMapping.clickableDisplay(in: activeDisplayBounds()) {
             nativeDragState = NativeDragState(
                 window: window,
@@ -205,6 +213,16 @@ public final class WindowResizeApp: NSObject, NSApplicationDelegate, @unchecked 
             return false
         }
         return true
+    }
+
+    private func titleBarYOffset(for window: AXUIElement) -> CGFloat {
+        var pid: pid_t = 0
+        guard AXUIElementGetPid(window, &pid) == .success else {
+            return NativeDragMapping.defaultTitleBarYOffset
+        }
+
+        let bundleIdentifier = NSRunningApplication(processIdentifier: pid)?.bundleIdentifier
+        return titleBarDragSettings.yOffset(for: bundleIdentifier)
     }
 
     private func activeDisplayBounds() -> [CGRect] {
