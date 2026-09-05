@@ -106,23 +106,30 @@ enum ResizeModel {
 }
 
 struct NativeDragMapping: Equatable {
+    static let defaultTitleBarYOffset: CGFloat = 3
+
     private static let edgeInset: CGFloat = 2
     private static let cornerInset: CGFloat = 5
-    private static let titleBarInset: CGFloat = 6
     private static let windowDisplayInset: CGFloat = 8
-    private static let moveTopDisplayInset: CGFloat = windowDisplayInset + titleBarInset
 
     let anchor: CGPoint
     private let target: ResizeTarget
     private let pointer: CGPoint
     private let offset: CGPoint
+    private let moveTopDisplayInset: CGFloat
 
-    init(pointer: CGPoint, frame: CGRect, target: ResizeTarget) {
+    init(
+        pointer: CGPoint,
+        frame: CGRect,
+        target: ResizeTarget,
+        titleBarYOffset: CGFloat = NativeDragMapping.defaultTitleBarYOffset
+    ) {
         self.target = target
         self.pointer = pointer
+        moveTopDisplayInset = Self.windowDisplayInset + titleBarYOffset
         switch target {
         case .move:
-            anchor = CGPoint(x: frame.midX, y: frame.minY + Self.titleBarInset)
+            anchor = CGPoint(x: pointer.x, y: frame.minY + titleBarYOffset)
         case .left:
             anchor = CGPoint(x: frame.minX + Self.edgeInset, y: pointer.y)
         case .right:
@@ -225,9 +232,9 @@ struct NativeDragMapping: Equatable {
         let movementBounds = bounds.map { bounds in
             CGRect(
                 x: bounds.minX,
-                y: bounds.minY + Self.moveTopDisplayInset,
+                y: bounds.minY + moveTopDisplayInset,
                 width: bounds.width,
-                height: bounds.height - Self.moveTopDisplayInset
+                height: bounds.height - moveTopDisplayInset
             )
         }
         guard !movementBounds.contains(where: { $0.contains(point) }) else {
