@@ -1,8 +1,41 @@
+import ApplicationServices
 import CoreGraphics
 import XCTest
 @testable import CursorResizeWindowCore
 
 final class WindowResizeAppTests: XCTestCase {
+    func testAccessibilityFallbackMovesUsingIncrementalDeltaWithoutResizing() {
+        let state = DragState(
+            window: AXUIElementCreateApplication(getpid()),
+            downLocation: CGPoint(x: 500, y: 400),
+            frame: CGRect(x: 100, y: 100, width: 800, height: 600),
+            target: .move
+        )
+
+        XCTAssertEqual(
+            state.updateFrame(to: CGPoint(x: 540, y: 425)),
+            CGRect(x: 140, y: 125, width: 800, height: 600)
+        )
+        XCTAssertEqual(
+            state.updateFrame(to: CGPoint(x: 520, y: 415)),
+            CGRect(x: 120, y: 115, width: 800, height: 600)
+        )
+    }
+
+    func testAccessibilityFallbackStillResizesSelectedCorner() {
+        let state = DragState(
+            window: AXUIElementCreateApplication(getpid()),
+            downLocation: CGPoint(x: 100, y: 100),
+            frame: CGRect(x: 100, y: 100, width: 800, height: 600),
+            target: .leftTop
+        )
+
+        XCTAssertEqual(
+            state.updateFrame(to: CGPoint(x: 120, y: 130)),
+            CGRect(x: 120, y: 130, width: 780, height: 570)
+        )
+    }
+
     func testPreparesNativeMouseDownWithoutDraggedEventDelta() throws {
         let source = try XCTUnwrap(CGEventSource(stateID: .hidSystemState))
         let event = try XCTUnwrap(
