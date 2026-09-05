@@ -129,10 +129,16 @@ final class ResizeModelTests: XCTestCase {
     }
 
     func testKeepsVisiblePointerAtOriginalOffsetFromNativeMoveAnchor() {
-        let mapping = NativeDragMapping(pointer: CGPoint(x: 250, y: 350), frame: frame, target: .move)
+        let mapping = NativeDragMapping(
+            pointer: CGPoint(x: 250, y: 350),
+            frame: frame,
+            target: .move,
+            moveAnchorX: 150
+        )
 
         XCTAssertEqual(mapping.visiblePointer(for: mapping.anchor), CGPoint(x: 250, y: 350))
-        XCTAssertEqual(mapping.visiblePointer(for: CGPoint(x: 270, y: 236)), CGPoint(x: 270, y: 380))
+        XCTAssertEqual(mapping.translate(CGPoint(x: 270, y: 380)), CGPoint(x: 170, y: 236))
+        XCTAssertEqual(mapping.visiblePointer(for: CGPoint(x: 170, y: 236)), CGPoint(x: 270, y: 380))
     }
 
     func testDistinguishesPreWarpAndPostWarpEventCoordinates() {

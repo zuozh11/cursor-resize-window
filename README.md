@@ -29,11 +29,13 @@ The utility redirects the drag to the selected macOS resize edge, corner, or tit
 
 Shadow cursor mode dynamically uses private macOS Window Server symbols to let this background utility hide the real cursor during native movement and resizing. If those symbols are unavailable or cursor hiding fails, movement safely falls back to the visible system-cursor warp behavior and resizing keeps its original event translation. Because these private symbols are not API-stable, a future macOS release may disable shadow cursor mode without notice.
 
-## Per-app Title-bar Offset
+## Title-bar Target and Optional Offsets
 
-Center movement starts the native drag at the original mouse-down X coordinate, 6 points below the window's top edge by default. Apps with custom title bars may need a different offset to avoid dragging a tab or clicking a button. The red dot shows the actual target; the utility does not automatically detect tabs or draggable regions.
+Center movement starts the native drag 6 points below the window's top edge by default. It keeps the original mouse-down X coordinate when that position directly hits the target window's background. Otherwise, it reads the Accessibility layout along the top of the window, excludes regions occupied by tabs, buttons, and other controls, and looks for a nearby visible background candidate belonging to the same window. This selection uses the same rules for every app, without app-name branches. The red dot shows the actual synthesized drag position, including any horizontal adjustment.
 
-Set an override using the app's bundle identifier. For example, to try a 2-point offset for Chrome:
+If no suitable candidate is found, the Accessibility layout cannot be read completely, or the lookup exceeds its budget, the utility leaves that center gesture untouched. Accessibility background candidates do not guarantee native draggability in every custom-drawn title bar.
+
+An optional per-app offset changes the height used by the same automatic target selection. Set an override using the app's bundle identifier. For example, to try a 2-point offset for Chrome:
 
 ```sh
 defaults write com.zuozhi.cursor-resize-window TitleBarYOffsets -dict-add com.google.Chrome -float 2
