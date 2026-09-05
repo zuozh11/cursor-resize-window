@@ -20,8 +20,8 @@ final class TitleBarDragSettingsTests: XCTestCase {
             ("com.google.Chrome", 2),
             ("com.jetbrains.intellij", 6),
             ("zero-offset-app", 0),
-            ("com.apple.Safari", 3),
-            (nil, 3)
+            ("com.apple.Safari", 6),
+            (nil, 6)
         ]
 
         for (bundleIdentifier, expectedOffset) in cases {
@@ -39,7 +39,7 @@ final class TitleBarDragSettingsTests: XCTestCase {
 
         defaults.removeObject(forKey: TitleBarDragSettings.offsetsKey)
         let resetSettings = TitleBarDragSettings(defaults: defaults)
-        XCTAssertEqual(resetSettings.yOffset(for: "com.google.Chrome"), 3)
+        XCTAssertEqual(resetSettings.yOffset(for: "com.google.Chrome"), 6)
     }
 
     func testTitleBarOffsetDoesNotChangeResizeAnchorsOrTranslation() {

@@ -31,7 +31,7 @@ Shadow cursor mode dynamically uses private macOS Window Server symbols to let t
 
 ## Per-app Title-bar Offset
 
-Center movement starts the native drag at the original mouse-down X coordinate, 3 points below the window's top edge by default. Apps with custom title bars may need a different offset to avoid dragging a tab or clicking a button. The red dot shows the actual target; the utility does not automatically detect tabs or draggable regions.
+Center movement starts the native drag at the original mouse-down X coordinate, 6 points below the window's top edge by default. Apps with custom title bars may need a different offset to avoid dragging a tab or clicking a button. The red dot shows the actual target; the utility does not automatically detect tabs or draggable regions.
 
 Set an override using the app's bundle identifier. For example, to try a 2-point offset for Chrome:
 
@@ -40,9 +40,9 @@ defaults write com.zuozhi.cursor-resize-window TitleBarYOffsets -dict-add com.go
 brew services restart zuozh11/tap/cursor-resize-window
 ```
 
-Run the same command with another bundle identifier to add an app without replacing existing overrides. Offsets are in macOS points (pt), limited to 0–15. Apps without a numeric override use 3 pt. Settings load when the utility starts; restart a foreground instance after changing them as well. Overrides affect center movement only.
+Run the same command with another bundle identifier to add an app without replacing existing overrides. Offsets are in macOS points (pt), limited to 0–15. Apps without a numeric override use 6 pt. Settings load when the utility starts; restart a foreground instance after changing them as well. Overrides affect center movement only.
 
-To clear all overrides and return to the 3-point default:
+To clear all overrides and return to the 6-point default:
 
 ```sh
 defaults delete com.zuozhi.cursor-resize-window TitleBarYOffsets

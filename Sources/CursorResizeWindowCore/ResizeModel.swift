@@ -106,7 +106,7 @@ enum ResizeModel {
 }
 
 struct NativeDragMapping: Equatable {
-    static let defaultTitleBarYOffset: CGFloat = 3
+    static let defaultTitleBarYOffset: CGFloat = 6
 
     private static let edgeInset: CGFloat = 2
     private static let cornerInset: CGFloat = 5
