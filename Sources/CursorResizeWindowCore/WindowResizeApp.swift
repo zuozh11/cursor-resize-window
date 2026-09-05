@@ -188,7 +188,7 @@ public final class WindowResizeApp: NSObject, NSApplicationDelegate, @unchecked 
 
         let target = ResizeTarget.from(point: point, frame: frame)
         let displays = activeDisplayBounds()
-        let yOffset = target == .move
+        var yOffset = target == .move
             ? titleBarYOffset(for: window)
             : NativeDragMapping.defaultTitleBarYOffset
         var moveAnchorX: CGFloat?
@@ -202,6 +202,8 @@ public final class WindowResizeApp: NSObject, NSApplicationDelegate, @unchecked 
                     yOffset: yOffset
                ) {
                 moveAnchorX = anchor.x
+            } else {
+                yOffset = NativeDragMapping.defaultTitleBarYOffset
             }
         }
         let nativeMapping = NativeDragMapping(
@@ -211,8 +213,7 @@ public final class WindowResizeApp: NSObject, NSApplicationDelegate, @unchecked 
             titleBarYOffset: yOffset,
             moveAnchorX: moveAnchorX
         )
-        let hasNativeAnchor = target != .move || moveAnchorX != nil
-        if hasNativeAnchor, let displayBounds = nativeMapping.clickableDisplay(in: displays) {
+        if let displayBounds = nativeMapping.clickableDisplay(in: displays) {
             nativeDragState = NativeDragState(
                 window: window,
                 mapping: nativeMapping,
