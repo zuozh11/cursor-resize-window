@@ -360,6 +360,23 @@ public final class WindowResizeApp: NSObject, NSApplicationDelegate, @unchecked 
         )
         events.drag.post(tap: .cghidEventTap)
         events.mouseUp?.post(tap: .cghidEventTap)
+        if nativeDragState.isMove {
+            // Calibrate once after the initial native events have been dispatched.
+            // Subsequent frames retain the existing pointer-driven prediction.
+            DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(50)) { [weak self] in
+                guard let self,
+                      let currentState = self.nativeDragState,
+                      ObjectIdentifier(currentState) == stateIdentifier,
+                      let actualFrame = self.frame(of: currentState.window),
+                      let pointer = CGEvent(source: nil)?.location
+                else {
+                    return
+                }
+                let translatedPointer = currentState.translate(pointer)
+                currentState.calibratePreview(frame: actualFrame, at: translatedPointer)
+                self.updateDragFeedback(at: translatedPointer, windowFrame: actualFrame)
+            }
+        }
     }
 
     private func finishNativeResize(with event: CGEvent) -> Unmanaged<CGEvent>? {
@@ -741,6 +758,11 @@ private final class NativeDragState {
 
     func visiblePointer(for synthesizedPointer: CGPoint) -> CGPoint {
         mapping.visiblePointer(for: synthesizedPointer)
+    }
+
+    func calibratePreview(frame: CGRect, at pointer: CGPoint) {
+        previewFrame = frame
+        synthesizedPointer = pointer
     }
 
     func updatePreviewFrame(for nextSynthesizedPointer: CGPoint) -> CGRect {
