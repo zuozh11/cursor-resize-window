@@ -340,20 +340,6 @@ public final class WindowResizeApp: NSObject, NSApplicationDelegate, @unchecked 
                 return
             }
             currentState.reinforcePointerWarp()
-            // Custom title bars can start native movement on the first dragged
-            // event. Prime that event at the same anchor as the preview before
-            // delivering the buffered displacement.
-            if currentState.isMove,
-               let starter = CGEvent(
-                    mouseEventSource: nil,
-                    mouseType: .leftMouseDragged,
-                    mouseCursorPosition: currentState.mapping.anchor,
-                    mouseButton: .left
-               ) {
-                starter.flags = []
-                starter.setIntegerValueField(.eventSourceUserData, value: syntheticArmedDragMarker)
-                starter.post(tap: .cghidEventTap)
-            }
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(20)) { [weak self] in
             self?.flushArmedNativeDrag(stateIdentifier: stateIdentifier)
