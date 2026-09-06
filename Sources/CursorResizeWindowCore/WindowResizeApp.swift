@@ -28,7 +28,7 @@ public final class WindowResizeApp: NSObject, NSApplicationDelegate, @unchecked 
     private var eventTap: CFMachPort?
     private var instanceLockFileDescriptor: Int32 = -1
     private let frameApplier = AXFrameApplier()
-    private let windowRaiseQueue = DispatchQueue(label: "cursor-resize-window.raise", qos: .userInteractive)
+    private let titleBarDragSettings = TitleBarDragSettings()
     private var dragState: DragState?
     private var consumedMouseDown: CGEvent?
     private var dragDetected = false
@@ -132,12 +132,6 @@ public final class WindowResizeApp: NSObject, NSApplicationDelegate, @unchecked 
             }
             dragDetected = false
             consumedMouseDown = event.copy()
-            if let dragState, dragState.target == .move {
-                _ = activateApplicationIfNeeded(for: dragState.window)
-                windowRaiseQueue.async {
-                    AXUIElementPerformAction(dragState.window, kAXRaiseAction as CFString)
-                }
-            }
             if let nativeDragState {
                 nativeDragState.pendingActivationPID = activateApplicationIfNeeded(
                     for: nativeDragState.window
@@ -152,7 +146,7 @@ public final class WindowResizeApp: NSObject, NSApplicationDelegate, @unchecked 
             if nativeDragState != nil {
                 return applyNativeResize(to: event)
             }
-            applyAccessibilityDrag(to: event.location)
+            applyAccessibilityResize(to: event.location)
             return nil
         case .leftMouseUp:
             guard dragState != nil || nativeDragState != nil else {
@@ -172,7 +166,7 @@ public final class WindowResizeApp: NSObject, NSApplicationDelegate, @unchecked 
                 finishDrag(keepingShadowCursor: isShadowCursorActive)
                 return rewrittenEvent
             }
-            applyAccessibilityDrag(to: event.location)
+            applyAccessibilityResize(to: event.location)
             finishDrag()
             return nil
         default:
@@ -189,16 +183,15 @@ public final class WindowResizeApp: NSObject, NSApplicationDelegate, @unchecked 
         }
 
         let target = ResizeTarget.from(point: point, frame: frame)
-        if target == .move {
-            dragState = DragState(window: window, downLocation: point, frame: frame, target: .move)
-            frameApplier.beginDrag(for: window, initialFrame: frame)
-            beginDragFeedback(at: point, windowFrame: frame, target: .move)
-            return true
-        }
-
-        let displays = activeDisplayBounds()
-        let nativeMapping = NativeDragMapping(pointer: point, frame: frame, target: target)
-        if let displayBounds = nativeMapping.clickableDisplay(in: displays) {
+        let nativeMapping = NativeDragMapping(
+            pointer: point,
+            frame: frame,
+            target: target,
+            titleBarYOffset: target == .move
+                ? titleBarYOffset(for: window)
+                : NativeDragMapping.defaultTitleBarYOffset
+        )
+        if let displayBounds = nativeMapping.clickableDisplay(in: activeDisplayBounds()) {
             nativeDragState = NativeDragState(
                 window: window,
                 mapping: nativeMapping,
@@ -208,19 +201,28 @@ public final class WindowResizeApp: NSObject, NSApplicationDelegate, @unchecked 
                 target: target
             )
             beginDragFeedback(at: nativeMapping.anchor, windowFrame: frame, target: target)
-        } else {
+        } else if let resizeDirection = target.resizeDirection {
             dragState = DragState(
                 window: window,
                 downLocation: point,
                 frame: frame,
-                target: target
+                direction: resizeDirection
             )
             frameApplier.beginDrag(for: window, initialFrame: frame)
-            if target == .move {
-                beginDragFeedback(at: point, windowFrame: frame, target: target)
-            }
+        } else {
+            return false
         }
         return true
+    }
+
+    private func titleBarYOffset(for window: AXUIElement) -> CGFloat {
+        var pid: pid_t = 0
+        guard AXUIElementGetPid(window, &pid) == .success else {
+            return NativeDragMapping.defaultTitleBarYOffset
+        }
+
+        let bundleIdentifier = NSRunningApplication(processIdentifier: pid)?.bundleIdentifier
+        return titleBarDragSettings.yOffset(for: bundleIdentifier)
     }
 
     private func activeDisplayBounds() -> [CGRect] {
@@ -251,21 +253,30 @@ public final class WindowResizeApp: NSObject, NSApplicationDelegate, @unchecked 
         }
     }
 
-    private func applyAccessibilityDrag(to point: CGPoint) {
+    private func applyAccessibilityResize(to point: CGPoint) {
         guard let dragState else {
             return
         }
 
-        let previousFrame = dragState.frame
-        let frame = dragState.updateFrame(to: point)
-        guard frame != previousFrame else {
+        let dx = point.x - dragState.downLocation.x
+        let dy = point.y - dragState.downLocation.y
+        guard dx != 0 || dy != 0 else {
             return
         }
 
-        frameApplier.enqueue(window: dragState.window, frame: frame)
-        if dragState.target == .move {
-            updateDragFeedback(at: point, windowFrame: frame)
+        let frame = ResizeModel.resize(
+            frame: dragState.frame,
+            direction: dragState.direction,
+            dx: dx,
+            dy: dy
+        )
+
+        if frame != dragState.frame {
+            frameApplier.enqueue(window: dragState.window, frame: frame)
         }
+
+        dragState.downLocation = point
+        dragState.frame = frame
     }
 
     private func applyNativeResize(to event: CGEvent) -> Unmanaged<CGEvent>? {
@@ -945,34 +956,22 @@ private final class BackgroundCursorAccess {
     }
 }
 
-final class DragState: @unchecked Sendable {
+private final class DragState: @unchecked Sendable {
     let window: AXUIElement
     var downLocation: CGPoint
     var frame: CGRect
-    let target: ResizeTarget
+    let direction: ResizeDirection
 
     init(
         window: AXUIElement,
         downLocation: CGPoint,
         frame: CGRect,
-        target: ResizeTarget
+        direction: ResizeDirection
     ) {
         self.window = window
         self.downLocation = downLocation
         self.frame = frame
-        self.target = target
-    }
-
-    func updateFrame(to point: CGPoint) -> CGRect {
-        let dx = point.x - downLocation.x
-        let dy = point.y - downLocation.y
-        if target == .move {
-            frame = frame.offsetBy(dx: dx, dy: dy)
-        } else if let direction = target.resizeDirection {
-            frame = ResizeModel.resize(frame: frame, direction: direction, dx: dx, dy: dy)
-        }
-        downLocation = point
-        return frame
+        self.direction = direction
     }
 }
 
