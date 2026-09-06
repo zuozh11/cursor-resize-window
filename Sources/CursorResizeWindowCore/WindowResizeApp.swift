@@ -33,6 +33,7 @@ public final class WindowResizeApp: NSObject, NSApplicationDelegate, @unchecked 
     private var consumedMouseDown: CGEvent?
     private var dragDetected = false
     private var nativeDragState: NativeDragState?
+    private var nativeMovePreviewTimer: Timer?
     private var dragFeedbackOverlay: DragFeedbackOverlay?
     private var shadowCursorController: ShadowCursorController?
 
@@ -317,6 +318,9 @@ public final class WindowResizeApp: NSObject, NSApplicationDelegate, @unchecked 
             )
             prepareNativeMouseDown(event, at: nativeDragState.mapping.anchor)
             scheduleArmedNativeDrag(for: nativeDragState)
+            if nativeDragState.isMove {
+                startNativeMovePreviewTracking()
+            }
             return Unmanaged.passUnretained(event)
         }
         if nativeDragState.updateArmingDrag(with: event) {
@@ -327,7 +331,13 @@ public final class WindowResizeApp: NSObject, NSApplicationDelegate, @unchecked 
         if isShadowCursorActive {
             updateShadowCursor(at: nativeDragState.visiblePointer(for: event.location))
         }
-        updateDragFeedback(at: event.location, windowFrame: previewFrame)
+        if nativeDragState.isMove {
+            MainActor.assumeIsolated {
+                dragFeedbackOverlay?.showPointer(at: event.location)
+            }
+        } else {
+            updateDragFeedback(at: event.location, windowFrame: previewFrame)
+        }
         return Unmanaged.passUnretained(event)
     }
 
@@ -377,7 +387,29 @@ public final class WindowResizeApp: NSObject, NSApplicationDelegate, @unchecked 
         return Unmanaged.passUnretained(event)
     }
 
+    private func startNativeMovePreviewTracking() {
+        nativeMovePreviewTimer?.invalidate()
+        // Read after event dispatch, and keep tracking when the pointer pauses:
+        // Window Server may apply the native drag after our event-tap callback.
+        let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
+            guard let self,
+                  let state = self.nativeDragState,
+                  state.isMove,
+                  let actualFrame = self.frame(of: state.window)
+            else {
+                return
+            }
+            MainActor.assumeIsolated {
+                self.dragFeedbackOverlay?.updateRegionFrame(actualFrame)
+            }
+        }
+        nativeMovePreviewTimer = timer
+        RunLoop.main.add(timer, forMode: .common)
+    }
+
     private func finishDrag(keepingShadowCursor: Bool = false) {
+        nativeMovePreviewTimer?.invalidate()
+        nativeMovePreviewTimer = nil
         if dragState != nil {
             frameApplier.endDrag()
         }
