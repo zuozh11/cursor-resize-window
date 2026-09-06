@@ -1238,5 +1238,5 @@ private func eventCallback(
 }
 
 func exceedsDragThreshold(from origin: CGPoint, to point: CGPoint) -> Bool {
-    hypot(point.x - origin.x, point.y - origin.y) > 1
+    hypot(point.x - origin.x, point.y - origin.y) > 5
 }

@@ -7,10 +7,10 @@ final class WindowResizeAppTests: XCTestCase {
     func testDragThresholdUsesDistanceFromPressIncludingDiagonalJitter() {
         let origin = CGPoint(x: 500, y: 400)
         XCTAssertFalse(exceedsDragThreshold(from: origin, to: origin))
-        XCTAssertFalse(exceedsDragThreshold(from: origin, to: CGPoint(x: 500.5, y: 400.5)))
-        XCTAssertFalse(exceedsDragThreshold(from: origin, to: CGPoint(x: 499, y: 400)))
-        XCTAssertTrue(exceedsDragThreshold(from: origin, to: CGPoint(x: 500.8, y: 400.8)))
-        XCTAssertTrue(exceedsDragThreshold(from: origin, to: CGPoint(x: 498.9, y: 400)))
+        XCTAssertFalse(exceedsDragThreshold(from: origin, to: CGPoint(x: 503, y: 404)))
+        XCTAssertFalse(exceedsDragThreshold(from: origin, to: CGPoint(x: 495, y: 400)))
+        XCTAssertTrue(exceedsDragThreshold(from: origin, to: CGPoint(x: 504, y: 404)))
+        XCTAssertTrue(exceedsDragThreshold(from: origin, to: CGPoint(x: 494.9, y: 400)))
     }
 
     func testAccessibilityFallbackMovesUsingIncrementalDeltaWithoutResizing() {
