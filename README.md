@@ -19,7 +19,7 @@ Run in the foreground:
 cursor-resize-window
 ```
 
-Then hold `ctrl`, left-click a window, and drag to resize or move it. Movement or resizing starts only after the pointer moves more than 5 macOS points from the press position. Until then, no drag feedback appears and the utility does not activate the window. Releasing within this distance replays the original Ctrl-click to the app; slight pointer jitter remains a click. The press is held until this decision, so app actions that normally happen on mouse-down occur on release. The press position selects the move or resize region, while movement starts from the position where the threshold is crossed, without replaying the initial dead-zone distance. Ctrl-drag remains reserved for window movement and resizing.
+Then hold `ctrl`, left-click a window, and drag to resize or move it.
 
 A red dot tracks the rewritten mouse position that macOS receives during native movement and resizing. During any native drag, the utility temporarily replaces the system cursor with a matching shadow cursor that stays under the user's pointer while the red dot marks the real title-bar, edge, or corner position. A 3-by-3 preview shows the resize regions, highlights the selected region, and follows the window for the entire gesture. Accessibility-based fallback movement keeps the preview and shows the red dot at the physical pointer. This feedback is not shown for Accessibility-based fallback resizing.
 
