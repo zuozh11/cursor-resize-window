@@ -31,7 +31,7 @@ public final class WindowResizeApp: NSObject, NSApplicationDelegate, @unchecked 
     private let titleBarDragSettings = TitleBarDragSettings()
     private var dragState: DragState?
     private var consumedMouseDown: CGEvent?
-    private var dragDetected = false
+    private var pendingDrag: (window: AXUIElement, frame: CGRect)?
     private var nativeDragState: NativeDragState?
     private var dragFeedbackOverlay: DragFeedbackOverlay?
     private var shadowCursorController: ShadowCursorController?
@@ -127,40 +127,47 @@ public final class WindowResizeApp: NSObject, NSApplicationDelegate, @unchecked 
         switch type {
         case .leftMouseDown:
             cancelShadowCursor()
-            guard hasOnlyControlKey(event.flags), beginDrag(at: event.location) else {
+            guard hasOnlyControlKey(event.flags),
+                  let window = windowElement(at: event.location),
+                  let frame = frame(of: window),
+                  let mouseDown = event.copy()
+            else {
                 return Unmanaged.passUnretained(event)
             }
-            dragDetected = false
-            consumedMouseDown = event.copy()
-            if let nativeDragState {
-                nativeDragState.pendingActivationPID = activateApplicationIfNeeded(
-                    for: nativeDragState.window
-                )
-            }
+            consumedMouseDown = mouseDown
+            pendingDrag = (window, frame)
             return nil
         case .leftMouseDragged:
+            if let pendingDrag, let consumedMouseDown {
+                guard exceedsDragThreshold(from: consumedMouseDown.location, to: event.location) else {
+                    return nil
+                }
+                self.pendingDrag = nil
+                beginDrag(at: consumedMouseDown.location, window: pendingDrag.window, frame: pendingDrag.frame)
+                if let nativeDragState {
+                    nativeDragState.pendingActivationPID = activateApplicationIfNeeded(for: nativeDragState.window)
+                } else if let dragState, dragState.target == .move {
+                    _ = activateApplicationIfNeeded(for: dragState.window)
+                    AXUIElementPerformAction(dragState.window, kAXRaiseAction as CFString)
+                }
+            }
             guard dragState != nil || nativeDragState != nil else {
                 return Unmanaged.passUnretained(event)
             }
-            if !dragDetected, let dragState, dragState.target == .move {
-                _ = activateApplicationIfNeeded(for: dragState.window)
-                AXUIElementPerformAction(dragState.window, kAXRaiseAction as CFString)
-            }
-            dragDetected = true
             if nativeDragState != nil {
                 return applyNativeResize(to: event)
             }
             applyAccessibilityDrag(to: event.location)
             return nil
         case .leftMouseUp:
-            guard dragState != nil || nativeDragState != nil else {
-                return Unmanaged.passUnretained(event)
-            }
-            if !dragDetected, let consumedMouseDown {
+            if pendingDrag != nil, let consumedMouseDown {
                 consumedMouseDown.tapPostEvent(proxy)
                 event.tapPostEvent(proxy)
                 finishDrag()
                 return nil
+            }
+            guard dragState != nil || nativeDragState != nil else {
+                return Unmanaged.passUnretained(event)
             }
             if let nativeDragState, nativeDragState.deferMouseUp(event) {
                 return nil
@@ -178,14 +185,7 @@ public final class WindowResizeApp: NSObject, NSApplicationDelegate, @unchecked 
         }
     }
 
-    private func beginDrag(at point: CGPoint) -> Bool {
-        guard
-            let window = windowElement(at: point),
-            let frame = frame(of: window)
-        else {
-            return false
-        }
-
+    private func beginDrag(at point: CGPoint, window: AXUIElement, frame: CGRect) {
         let target = ResizeTarget.from(point: point, frame: frame)
         let displays = activeDisplayBounds()
         var yOffset = target == .move
@@ -235,7 +235,6 @@ public final class WindowResizeApp: NSObject, NSApplicationDelegate, @unchecked 
                 beginDragFeedback(at: point, windowFrame: frame, target: target)
             }
         }
-        return true
     }
 
     private func titleBarYOffset(for window: AXUIElement) -> CGFloat {
@@ -384,7 +383,7 @@ public final class WindowResizeApp: NSObject, NSApplicationDelegate, @unchecked 
         dragState = nil
         nativeDragState = nil
         consumedMouseDown = nil
-        dragDetected = false
+        pendingDrag = nil
         hideDragFeedback(keepingShadowCursor: keepingShadowCursor)
     }
 
@@ -1232,4 +1231,8 @@ private func eventCallback(
 
     let app = Unmanaged<WindowResizeApp>.fromOpaque(refcon).takeUnretainedValue()
     return app.handle(type, event: event, proxy: proxy)
+}
+
+func exceedsDragThreshold(from origin: CGPoint, to point: CGPoint) -> Bool {
+    hypot(point.x - origin.x, point.y - origin.y) > 5
 }
