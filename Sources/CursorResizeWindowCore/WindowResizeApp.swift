@@ -28,6 +28,7 @@ public final class WindowResizeApp: NSObject, NSApplicationDelegate, @unchecked 
     private var eventTap: CFMachPort?
     private var instanceLockFileDescriptor: Int32 = -1
     private let frameApplier = AXFrameApplier()
+    private let windowRaiseQueue = DispatchQueue(label: "cursor-resize-window.raise", qos: .userInteractive)
     private var dragState: DragState?
     private var consumedMouseDown: CGEvent?
     private var dragDetected = false
@@ -131,6 +132,12 @@ public final class WindowResizeApp: NSObject, NSApplicationDelegate, @unchecked 
             }
             dragDetected = false
             consumedMouseDown = event.copy()
+            if let dragState, dragState.target == .move {
+                _ = activateApplicationIfNeeded(for: dragState.window)
+                windowRaiseQueue.async {
+                    AXUIElementPerformAction(dragState.window, kAXRaiseAction as CFString)
+                }
+            }
             if let nativeDragState {
                 nativeDragState.pendingActivationPID = activateApplicationIfNeeded(
                     for: nativeDragState.window
@@ -140,10 +147,6 @@ public final class WindowResizeApp: NSObject, NSApplicationDelegate, @unchecked 
         case .leftMouseDragged:
             guard dragState != nil || nativeDragState != nil else {
                 return Unmanaged.passUnretained(event)
-            }
-            if !dragDetected, let dragState, dragState.target == .move {
-                _ = activateApplicationIfNeeded(for: dragState.window)
-                AXUIElementPerformAction(dragState.window, kAXRaiseAction as CFString)
             }
             dragDetected = true
             if nativeDragState != nil {
