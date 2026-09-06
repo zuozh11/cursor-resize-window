@@ -143,7 +143,12 @@ public final class WindowResizeApp: NSObject, NSApplicationDelegate, @unchecked 
                     return nil
                 }
                 self.pendingDrag = nil
-                beginDrag(at: consumedMouseDown.location, window: pendingDrag.window, frame: pendingDrag.frame)
+                beginDrag(
+                    at: event.location,
+                    target: ResizeTarget.from(point: consumedMouseDown.location, frame: pendingDrag.frame),
+                    window: pendingDrag.window,
+                    frame: pendingDrag.frame
+                )
                 if let nativeDragState {
                     nativeDragState.pendingActivationPID = activateApplicationIfNeeded(for: nativeDragState.window)
                 } else if let dragState, dragState.target == .move {
@@ -185,8 +190,7 @@ public final class WindowResizeApp: NSObject, NSApplicationDelegate, @unchecked 
         }
     }
 
-    private func beginDrag(at point: CGPoint, window: AXUIElement, frame: CGRect) {
-        let target = ResizeTarget.from(point: point, frame: frame)
+    private func beginDrag(at point: CGPoint, target: ResizeTarget, window: AXUIElement, frame: CGRect) {
         let displays = activeDisplayBounds()
         var yOffset = target == .move
             ? titleBarYOffset(for: window)
