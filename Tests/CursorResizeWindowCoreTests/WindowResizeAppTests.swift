@@ -4,6 +4,22 @@ import XCTest
 @testable import CursorResizeWindowCore
 
 final class WindowResizeAppTests: XCTestCase {
+    func testNativeHandoffTranslatesQueuedTitleBarCoordinates() {
+        let handoff = NativePointerHandoff(native: CGPoint(x: 1000, y: 39),
+                                           physical: CGPoint(x: 1000, y: 507.5))
+        XCTAssertEqual(handoff.translateNativePoint(CGPoint(x: 1002, y: 39)),
+                       CGPoint(x: 1002, y: 507.5))
+        XCTAssertNil(handoff.translateNativePoint(CGPoint(x: 1003, y: 508)))
+    }
+
+    func testNativeHandoffUsesCurrentPositionsAfterLargeMovement() {
+        let handoff = NativePointerHandoff(native: CGPoint(x: 1400, y: 400),
+                                           physical: CGPoint(x: 1100, y: 900))
+        XCTAssertEqual(handoff.translateNativePoint(CGPoint(x: 1398, y: 402)),
+                       CGPoint(x: 1098, y: 902))
+        XCTAssertNil(handoff.translateNativePoint(CGPoint(x: 1098, y: 902)))
+    }
+
     func testAccessibilityFallbackMovesUsingIncrementalDeltaWithoutResizing() {
         let state = DragState(
             window: AXUIElementCreateApplication(getpid()),
