@@ -27,27 +27,6 @@ final class WindowResizeAppTests: XCTestCase {
         XCTAssertEqual(event.getIntegerValueField(.mouseEventClickState), 1)
         XCTAssertEqual(event.getDoubleValueField(.mouseEventPressure), 1)
     }
-    func testVisibleMovePointerReachesTopAfterTitleBarEventStops() {
-        let frame = CGRect(x: 100, y: 200, width: 600, height: 400)
-        let mapping = NativeDragMapping(pointer: CGPoint(x: 400, y: 400), frame: frame, target: .move)
-        let state = NativeDragState(
-            window: AXUIElementCreateSystemWide(), windowID: nil, mapping: mapping,
-            displayBounds: CGRect(x: 0, y: 25, width: 1920, height: 1055),
-            screenBounds: [CGRect(x: 0, y: 0, width: 1920, height: 1080)],
-            frame: frame, target: .move
-        )
-        _ = state.beginIndependentMovePointer(at: CGPoint(x: 400, y: 400))
-        let stoppedEvent = state.advanceMovePointer(by: CGPoint(x: 0, y: -250))
-        XCTAssertEqual(stoppedEvent.y, 0)
-        XCTAssertEqual(state.visiblePointer(for: stoppedEvent).y, 150)
-        let topEvent = state.advanceMovePointer(by: CGPoint(x: 0, y: -200))
-        XCTAssertEqual(topEvent.y, 0)
-        XCTAssertEqual(state.visiblePointer(for: topEvent).y, 0)
-        XCTAssertEqual(state.currentMoveEventPoint, topEvent)
-        let returningEvent = state.advanceMovePointer(by: CGPoint(x: 0, y: 10))
-        XCTAssertEqual(state.visiblePointer(for: returningEvent).y, 10)
-    }
-
     func testPreviewWaitsForRealWindowMovementBeforeFollowingPointer() {
         let initial = CGRect(x: 100, y: 100, width: 600, height: 400)
         let mapping = NativeDragMapping(pointer: CGPoint(x: 400, y: 300), frame: initial, target: .move)

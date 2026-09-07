@@ -116,6 +116,7 @@ struct NativeDragMapping: Equatable {
     private let target: ResizeTarget
     private let pointer: CGPoint
     private let offset: CGPoint
+    private let moveTopDisplayInset: CGFloat
 
     init(
         pointer: CGPoint,
@@ -126,6 +127,7 @@ struct NativeDragMapping: Equatable {
     ) {
         self.target = target
         self.pointer = pointer
+        moveTopDisplayInset = Self.windowDisplayInset + (moveAnchor.map { $0.y - frame.minY } ?? titleBarYOffset)
         switch target {
         case .move:
             anchor = moveAnchor ?? CGPoint(x: pointer.x, y: frame.minY + titleBarYOffset)
@@ -228,11 +230,19 @@ struct NativeDragMapping: Equatable {
     }
 
     func constrain(_ point: CGPoint, toAny bounds: [CGRect]) -> CGPoint {
-        guard !bounds.contains(where: { $0.contains(point) }) else {
+        let movementBounds = bounds.map { bounds in
+            CGRect(
+                x: bounds.minX,
+                y: bounds.minY + moveTopDisplayInset,
+                width: bounds.width,
+                height: bounds.height - moveTopDisplayInset
+            )
+        }
+        guard !movementBounds.contains(where: { $0.contains(point) }) else {
             return point
         }
 
-        return bounds
+        return movementBounds
             .map { bounds in
                 CGPoint(
                     x: min(max(point.x, bounds.minX), bounds.maxX),
