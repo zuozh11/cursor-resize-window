@@ -319,9 +319,20 @@ public final class WindowResizeApp: NSObject, NSApplicationDelegate, @unchecked 
                 prepareNativeMouseDown(mouseDown, at: nativeDragState.mapping.anchor)
                 mouseDown.tapPostEvent(proxy)
             }
-            event.location = nativeDragState.translateFirstDrag(inputLocation)
+            if nativeDragState.isMove && isShadowCursorActive {
+                event.location = nativeDragState.beginIndependentMovePointer(at: inputLocation)
+            } else {
+                event.location = nativeDragState.translateFirstDrag(inputLocation)
+            }
         } else {
-            event.location = nativeDragState.translate(event.location)
+            if nativeDragState.hasIndependentMovePointer {
+                event.location = nativeDragState.advanceMovePointer(by: CGPoint(
+                    x: event.getDoubleValueField(.mouseEventDeltaX),
+                    y: event.getDoubleValueField(.mouseEventDeltaY)
+                ))
+            } else {
+                event.location = nativeDragState.translate(event.location)
+            }
         }
         if isShadowCursorActive {
             updateShadowCursor(at: nativeDragState.visiblePointer(for: event.location))
@@ -374,7 +385,7 @@ public final class WindowResizeApp: NSObject, NSApplicationDelegate, @unchecked 
         }
 
         event.flags.remove(.maskControl)
-        event.location = nativeDragState.translate(event.location)
+        event.location = nativeDragState.currentMoveEventPoint ?? nativeDragState.translate(event.location)
         if isShadowCursorActive {
             let visiblePointer = nativeDragState.visiblePointer(for: event.location)
             updateShadowCursor(at: visiblePointer)
@@ -651,6 +662,7 @@ final class NativeDragState {
     private let target: ResizeTarget
     private var synthesizedPointer: CGPoint
     private var previewFrame: CGRect
+    private var independentMovePointer: CGPoint?
     private var usesWarpedPointer = false
     private var usesWarpedEventCoordinates = false
     var needsPointerWarp = true
@@ -719,8 +731,26 @@ final class NativeDragState {
         return usesWarpedPointer
     }
 
+    var hasIndependentMovePointer: Bool {
+        independentMovePointer != nil
+    }
+
+    var currentMoveEventPoint: CGPoint? {
+        independentMovePointer.map { mapping.translate($0, constrainedToAny: screenBounds) }
+    }
+
+    func beginIndependentMovePointer(at point: CGPoint) -> CGPoint {
+        independentMovePointer = mapping.constrain(point, toAny: screenBounds)
+        return currentMoveEventPoint!
+    }
+
+    func advanceMovePointer(by delta: CGPoint) -> CGPoint {
+        let point = independentMovePointer!
+        return beginIndependentMovePointer(at: CGPoint(x: point.x + delta.x, y: point.y + delta.y))
+    }
+
     func visiblePointer(for synthesizedPointer: CGPoint) -> CGPoint {
-        mapping.visiblePointer(for: synthesizedPointer)
+        independentMovePointer ?? mapping.visiblePointer(for: synthesizedPointer)
     }
 
     func beginPreviewMovement(at point: CGPoint) {
