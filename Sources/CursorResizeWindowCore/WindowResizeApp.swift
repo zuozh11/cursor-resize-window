@@ -197,6 +197,7 @@ public final class WindowResizeApp: NSObject, NSApplicationDelegate, @unchecked 
         if let displayBounds = nativeMapping.clickableDisplay(in: activeDisplayBounds()) {
             nativeDragState = NativeDragState(
                 window: window,
+                windowID: target == .move ? windowServerID(for: window, frame: frame) : nil,
                 mapping: nativeMapping,
                 displayBounds: displayBounds,
                 screenBounds: activeScreenBounds(),
@@ -339,6 +340,12 @@ public final class WindowResizeApp: NSObject, NSApplicationDelegate, @unchecked 
 
     private func updateNativeDragFeedback(at point: CGPoint) {
         guard let nativeDragState else { return }
+        if nativeDragState.awaitingWindowMovement,
+           let id = nativeDragState.windowID,
+           let info = (CGWindowListCopyWindowInfo(.optionIncludingWindow, id) as? [[String: Any]])?.first,
+           let actualFrame = windowBounds(info) {
+            nativeDragState.observeInitialWindowFrame(actualFrame)
+        }
         let previewFrame = nativeDragState.updatePreviewFrame(for: point)
         updateDragFeedback(at: point, windowFrame: previewFrame)
     }
@@ -519,6 +526,17 @@ public final class WindowResizeApp: NSObject, NSApplicationDelegate, @unchecked 
         }
     }
 
+    private func windowServerID(for window: AXUIElement, frame: CGRect) -> CGWindowID? {
+        var pid: pid_t = 0
+        guard AXUIElementGetPid(window, &pid) == .success,
+              let windows = CGWindowListCopyWindowInfo(
+                [.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID
+              ) as? [[String: Any]] else { return nil }
+        return windows.first {
+            windowOwnerPID($0) == pid && windowLayer($0) == 0 && windowBounds($0) == frame
+        }.flatMap { ($0[kCGWindowNumber as String] as? NSNumber)?.uint32Value }
+    }
+
     private func windowOwnerPIDFromWindowServer(at point: CGPoint) -> pid_t? {
         guard let windowInfoList = CGWindowListCopyWindowInfo(
             [.optionOnScreenOnly, .excludeDesktopElements],
@@ -623,8 +641,10 @@ public final class WindowResizeApp: NSObject, NSApplicationDelegate, @unchecked 
 
 }
 
-private final class NativeDragState {
+final class NativeDragState {
     let window: AXUIElement
+    let windowID: CGWindowID?
+    private(set) var awaitingWindowMovement: Bool
     let mapping: NativeDragMapping
     private let displayBounds: CGRect
     private let screenBounds: [CGRect]
@@ -643,6 +663,7 @@ private final class NativeDragState {
 
     init(
         window: AXUIElement,
+        windowID: CGWindowID?,
         mapping: NativeDragMapping,
         displayBounds: CGRect,
         screenBounds: [CGRect],
@@ -650,6 +671,8 @@ private final class NativeDragState {
         target: ResizeTarget
     ) {
         self.window = window
+        self.windowID = windowID
+        awaitingWindowMovement = target == .move && windowID != nil
         self.mapping = mapping
         self.displayBounds = displayBounds
         self.screenBounds = screenBounds
@@ -701,12 +724,20 @@ private final class NativeDragState {
     }
 
     func beginPreviewMovement(at point: CGPoint) {
-        // The first delivered drag starts native window movement at this point.
-        // Buffered pointer travel must not shift the still-stationary preview.
         synthesizedPointer = point
     }
 
+    func observeInitialWindowFrame(_ actualFrame: CGRect) {
+        guard awaitingWindowMovement, actualFrame != previewFrame else { return }
+        previewFrame = actualFrame
+        awaitingWindowMovement = false
+    }
+
     func updatePreviewFrame(for nextSynthesizedPointer: CGPoint) -> CGRect {
+        if awaitingWindowMovement {
+            synthesizedPointer = nextSynthesizedPointer
+            return previewFrame
+        }
         let dx = nextSynthesizedPointer.x - synthesizedPointer.x
         let dy = nextSynthesizedPointer.y - synthesizedPointer.y
 
