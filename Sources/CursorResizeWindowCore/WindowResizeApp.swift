@@ -111,11 +111,6 @@ public final class WindowResizeApp: NSObject, NSApplicationDelegate, @unchecked 
     }
 
     fileprivate func handle(_ type: CGEventType, event: CGEvent, proxy: CGEventTapProxy) -> Unmanaged<CGEvent>? {
-        if type == .leftMouseDragged,
-           event.getIntegerValueField(.eventSourceUserData) == syntheticArmedDragMarker
-        {
-            return Unmanaged.passUnretained(event)
-        }
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
             cancelDrag()
             if let eventTap {
@@ -133,7 +128,7 @@ public final class WindowResizeApp: NSObject, NSApplicationDelegate, @unchecked 
             dragDetected = false
             consumedMouseDown = event.copy()
             if let nativeDragState {
-                nativeDragState.pendingActivationPID = activateApplicationIfNeeded(
+                activateApplicationIfNeeded(
                     for: nativeDragState.window
                 )
             }
@@ -144,7 +139,7 @@ public final class WindowResizeApp: NSObject, NSApplicationDelegate, @unchecked 
             }
             dragDetected = true
             if nativeDragState != nil {
-                return applyNativeResize(to: event)
+                return applyNativeResize(to: event, proxy: proxy)
             }
             applyAccessibilityResize(to: event.location)
             return nil
@@ -156,9 +151,6 @@ public final class WindowResizeApp: NSObject, NSApplicationDelegate, @unchecked 
                 consumedMouseDown.tapPostEvent(proxy)
                 event.tapPostEvent(proxy)
                 finishDrag()
-                return nil
-            }
-            if let nativeDragState, nativeDragState.deferMouseUp(event) {
                 return nil
             }
             if nativeDragState != nil {
@@ -279,7 +271,7 @@ public final class WindowResizeApp: NSObject, NSApplicationDelegate, @unchecked 
         dragState.frame = frame
     }
 
-    private func applyNativeResize(to event: CGEvent) -> Unmanaged<CGEvent>? {
+    private func applyNativeResize(to event: CGEvent, proxy: CGEventTapProxy) -> Unmanaged<CGEvent>? {
         guard let nativeDragState else {
             return Unmanaged.passUnretained(event)
         }
@@ -288,7 +280,6 @@ public final class WindowResizeApp: NSObject, NSApplicationDelegate, @unchecked 
         event.flags.remove(.maskControl)
         if nativeDragState.needsPointerWarp {
             nativeDragState.needsPointerWarp = false
-            waitForApplicationActivation(pid: nativeDragState.pendingActivationPID)
             let usesShadowCursor = beginShadowCursor(
                 at: nativeDragState.visiblePointer(for: nativeDragState.mapping.anchor)
             )
@@ -297,55 +288,21 @@ public final class WindowResizeApp: NSObject, NSApplicationDelegate, @unchecked 
                     cancelShadowCursor()
                 }
             }
-            nativeDragState.beginArmingDrag(
-                with: event,
-                at: nativeDragState.translateFirstDrag(inputLocation)
-            )
-            prepareNativeMouseDown(event, at: nativeDragState.mapping.anchor)
-            scheduleArmedNativeDrag(for: nativeDragState)
-            return Unmanaged.passUnretained(event)
+            if let mouseDown = consumedMouseDown {
+                mouseDown.flags.remove(.maskControl)
+                prepareNativeMouseDown(mouseDown, at: nativeDragState.mapping.anchor)
+                mouseDown.tapPostEvent(proxy)
+            }
+            event.location = nativeDragState.translateFirstDrag(inputLocation)
+        } else {
+            event.location = nativeDragState.translate(event.location)
         }
-        if nativeDragState.updateArmingDrag(with: event) {
-            return nil
-        }
-        event.location = nativeDragState.translate(event.location)
         let previewFrame = nativeDragState.updatePreviewFrame(for: event.location)
         if isShadowCursorActive {
             updateShadowCursor(at: nativeDragState.visiblePointer(for: event.location))
         }
         updateDragFeedback(at: event.location, windowFrame: previewFrame)
         return Unmanaged.passUnretained(event)
-    }
-
-    private func scheduleArmedNativeDrag(for nativeDragState: NativeDragState) {
-        let stateIdentifier = ObjectIdentifier(nativeDragState)
-        DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(5)) { [weak self] in
-            guard let currentState = self?.nativeDragState,
-                  ObjectIdentifier(currentState) == stateIdentifier
-            else {
-                return
-            }
-            currentState.reinforcePointerWarp()
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(20)) { [weak self] in
-            self?.flushArmedNativeDrag(stateIdentifier: stateIdentifier)
-        }
-    }
-
-    private func flushArmedNativeDrag(stateIdentifier: ObjectIdentifier) {
-        guard let nativeDragState,
-              ObjectIdentifier(nativeDragState) == stateIdentifier,
-              let events = nativeDragState.finishArmingDrag()
-        else {
-            return
-        }
-
-        events.drag.setIntegerValueField(
-            .eventSourceUserData,
-            value: syntheticArmedDragMarker
-        )
-        events.drag.post(tap: .cghidEventTap)
-        events.mouseUp?.post(tap: .cghidEventTap)
     }
 
     private func finishNativeResize(with event: CGEvent) -> Unmanaged<CGEvent>? {
@@ -454,33 +411,17 @@ public final class WindowResizeApp: NSObject, NSApplicationDelegate, @unchecked 
         }
     }
 
-    private func activateApplicationIfNeeded(for window: AXUIElement) -> pid_t? {
+    private func activateApplicationIfNeeded(for window: AXUIElement) {
         var pid: pid_t = 0
         guard AXUIElementGetPid(window, &pid) == .success else {
-            return nil
-        }
-
-        return MainActor.assumeIsolated {
-            guard NSWorkspace.shared.frontmostApplication?.processIdentifier != pid else {
-                return nil
-            }
-            _ = NSRunningApplication(processIdentifier: pid)?.activate()
-            return pid
-        }
-    }
-
-    private func waitForApplicationActivation(pid: pid_t?) {
-        guard let pid else {
             return
         }
-        for _ in 0..<10 {
-            let isActive = MainActor.assumeIsolated {
-                NSWorkspace.shared.frontmostApplication?.processIdentifier == pid
-            }
-            if isActive {
+
+        MainActor.assumeIsolated {
+            guard NSWorkspace.shared.frontmostApplication?.processIdentifier != pid else {
                 return
             }
-            usleep(5_000)
+            _ = NSRunningApplication(processIdentifier: pid)?.activate()
         }
     }
 
@@ -636,8 +577,6 @@ private final class NativeDragState {
     private var previewFrame: CGRect
     private var usesWarpedPointer = false
     private var usesWarpedEventCoordinates = false
-    private let armingBuffer = NativeDragArmingBuffer()
-    var pendingActivationPID: pid_t?
     var needsPointerWarp = true
 
     var isMove: Bool {
@@ -683,22 +622,6 @@ private final class NativeDragState {
         return mapping.translate(point, constrainedTo: displayBounds)
     }
 
-    func beginArmingDrag(with event: CGEvent, at point: CGPoint) {
-        armingBuffer.begin(with: event, at: point)
-    }
-
-    func updateArmingDrag(with event: CGEvent) -> Bool {
-        armingBuffer.update(with: event, at: translate(event.location))
-    }
-
-    func deferMouseUp(_ event: CGEvent) -> Bool {
-        armingBuffer.deferMouseUp(event)
-    }
-
-    func finishArmingDrag() -> (drag: CGEvent, mouseUp: CGEvent?)? {
-        armingBuffer.finish()
-    }
-
     func translateFirstDrag(_ point: CGPoint) -> CGPoint {
         if target == .move {
             return mapping.translate(point, constrainedToAny: screenBounds)
@@ -713,16 +636,6 @@ private final class NativeDragState {
             CGAssociateMouseAndMouseCursorPosition(boolean_t(1))
         }
         return usesWarpedPointer
-    }
-
-    func reinforcePointerWarp() {
-        guard usesWarpedPointer else {
-            return
-        }
-        _ = setLocalEventsSuppressionInterval(0)
-        if CGWarpMouseCursorPosition(mapping.anchor) == .success {
-            CGAssociateMouseAndMouseCursorPosition(boolean_t(1))
-        }
     }
 
     func visiblePointer(for synthesizedPointer: CGPoint) -> CGPoint {
@@ -746,57 +659,6 @@ private final class NativeDragState {
 
         synthesizedPointer = nextSynthesizedPointer
         return previewFrame
-    }
-}
-
-final class NativeDragArmingBuffer {
-    private var pendingDrag: CGEvent?
-    private var pendingMouseUp: CGEvent?
-
-    func begin(with event: CGEvent, at point: CGPoint) {
-        guard let pendingDrag = event.copy() else {
-            return
-        }
-        pendingDrag.flags.remove(.maskControl)
-        pendingDrag.type = .leftMouseDragged
-        pendingDrag.location = point
-        self.pendingDrag = pendingDrag
-    }
-
-    func update(with event: CGEvent, at point: CGPoint) -> Bool {
-        guard pendingDrag != nil,
-              let pendingDrag = event.copy()
-        else {
-            return false
-        }
-        pendingDrag.flags.remove(.maskControl)
-        pendingDrag.type = .leftMouseDragged
-        pendingDrag.location = point
-        self.pendingDrag = pendingDrag
-        return true
-    }
-
-    func deferMouseUp(_ event: CGEvent) -> Bool {
-        guard let pendingDrag,
-              let pendingMouseUp = event.copy()
-        else {
-            return false
-        }
-        pendingMouseUp.flags.remove(.maskControl)
-        pendingMouseUp.type = .leftMouseUp
-        pendingMouseUp.location = pendingDrag.location
-        self.pendingMouseUp = pendingMouseUp
-        return true
-    }
-
-    func finish() -> (drag: CGEvent, mouseUp: CGEvent?)? {
-        guard let pendingDrag else {
-            return nil
-        }
-        let events = (pendingDrag, pendingMouseUp)
-        self.pendingDrag = nil
-        pendingMouseUp = nil
-        return events
     }
 }
 
@@ -1178,8 +1040,6 @@ private func hasOnlyControlKey(_ flags: CGEventFlags) -> Bool {
     let keyMask: CGEventFlags = [.maskControl, .maskCommand, .maskAlternate, .maskShift, .maskSecondaryFn]
     return flags.intersection(keyMask) == .maskControl
 }
-
-private let syntheticArmedDragMarker: Int64 = 0x4352_5744
 
 func prepareNativeMouseDown(
     _ event: CGEvent,
