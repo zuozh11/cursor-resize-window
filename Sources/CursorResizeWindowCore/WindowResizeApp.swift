@@ -113,6 +113,7 @@ public final class WindowResizeApp: NSObject, NSApplicationDelegate, @unchecked 
     fileprivate func handle(_ type: CGEventType, event: CGEvent, proxy: CGEventTapProxy) -> Unmanaged<CGEvent>? {
         if type == .leftMouseDragged,
            event.getIntegerValueField(.eventSourceUserData) == delayedMoveDragMarker {
+            nativeDragState?.beginPreviewMovement(at: event.location)
             updateNativeDragFeedback(at: event.location)
             return Unmanaged.passUnretained(event)
         }
@@ -697,6 +698,12 @@ private final class NativeDragState {
 
     func visiblePointer(for synthesizedPointer: CGPoint) -> CGPoint {
         mapping.visiblePointer(for: synthesizedPointer)
+    }
+
+    func beginPreviewMovement(at point: CGPoint) {
+        // The first delivered drag starts native window movement at this point.
+        // Buffered pointer travel must not shift the still-stationary preview.
+        synthesizedPointer = point
     }
 
     func updatePreviewFrame(for nextSynthesizedPointer: CGPoint) -> CGRect {
