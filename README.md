@@ -29,6 +29,8 @@ The utility redirects the drag to the selected macOS resize edge, corner, or tit
 
 Shadow cursor mode dynamically uses private macOS Window Server symbols to let this background utility hide the real cursor during native movement and resizing. If those symbols are unavailable or cursor hiding fails, movement safely falls back to the visible system-cursor warp behavior and resizing keeps its original event translation. Because these private symbols are not API-stable, a future macOS release may disable shadow cursor mode without notice.
 
+Center dragging waits 20 ms after the simulated mouse-down before sending the first drag event, giving the app time to process the title-bar press. Mouse movement during this interval is coalesced, and a quick release is delivered afterward. This startup interval applies to all apps; edge and corner resizing starts immediately.
+
 ## Per-app Title-bar Offset
 
 Center movement starts the native drag 8 points to the right of the green window button, aligned vertically with its center. The button position comes from Accessibility's window zoom-button attribute. The red dot shows the selected target; this point is not guaranteed to be draggable in every app.
