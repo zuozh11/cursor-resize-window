@@ -111,6 +111,10 @@ public final class WindowResizeApp: NSObject, NSApplicationDelegate, @unchecked 
     }
 
     fileprivate func handle(_ type: CGEventType, event: CGEvent, proxy: CGEventTapProxy) -> Unmanaged<CGEvent>? {
+        if type == .leftMouseDragged,
+           event.getIntegerValueField(.eventSourceUserData) == delayedIdeaDragMarker {
+            return Unmanaged.passUnretained(event)
+        }
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
             cancelDrag()
             if let eventTap {
@@ -153,6 +157,10 @@ public final class WindowResizeApp: NSObject, NSApplicationDelegate, @unchecked 
                 finishDrag()
                 return nil
             }
+            if let nativeDragState, nativeDragState.pendingInitialDrag != nil {
+                nativeDragState.pendingInitialMouseUp = event.copy()
+                return nil
+            }
             if nativeDragState != nil {
                 let rewrittenEvent = finishNativeResize(with: event)
                 finishDrag(keepingShadowCursor: isShadowCursorActive)
@@ -193,6 +201,12 @@ public final class WindowResizeApp: NSObject, NSApplicationDelegate, @unchecked 
                 frame: frame,
                 target: target
             )
+            var pid: pid_t = 0
+            if target == .move, AXUIElementGetPid(window, &pid) == .success {
+                let bundleID = NSRunningApplication(processIdentifier: pid)?.bundleIdentifier
+                nativeDragState?.delaysInitialDrag = bundleID == "com.jetbrains.intellij"
+                    || bundleID == "com.jetbrains.intellij.ce"
+            }
             beginDragFeedback(at: nativeMapping.anchor, windowFrame: frame, target: target)
         } else if let resizeDirection = target.resizeDirection {
             dragState = DragState(
@@ -291,6 +305,7 @@ public final class WindowResizeApp: NSObject, NSApplicationDelegate, @unchecked 
         }
 
         let inputLocation = event.location
+        let isFirstDrag = nativeDragState.needsPointerWarp
         event.flags.remove(.maskControl)
         if nativeDragState.needsPointerWarp {
             nativeDragState.needsPointerWarp = false
@@ -316,7 +331,33 @@ public final class WindowResizeApp: NSObject, NSApplicationDelegate, @unchecked 
             updateShadowCursor(at: nativeDragState.visiblePointer(for: event.location))
         }
         updateDragFeedback(at: event.location, windowFrame: previewFrame)
+        if nativeDragState.delaysInitialDrag,
+           isFirstDrag || nativeDragState.pendingInitialDrag != nil {
+            nativeDragState.pendingInitialDrag = event.copy()
+            if isFirstDrag {
+                scheduleInitialIdeaDrag(for: nativeDragState)
+            }
+            return nil
+        }
         return Unmanaged.passUnretained(event)
+    }
+
+    private func scheduleInitialIdeaDrag(for state: NativeDragState) {
+        let identifier = ObjectIdentifier(state)
+        DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(20)) { [weak self] in
+            guard let state = self?.nativeDragState, ObjectIdentifier(state) == identifier,
+                  let drag = state.pendingInitialDrag else {
+                return
+            }
+            let mouseUp = state.pendingInitialMouseUp
+            state.pendingInitialDrag = nil
+            state.pendingInitialMouseUp = nil
+            drag.setIntegerValueField(.eventSourceUserData, value: delayedIdeaDragMarker)
+            drag.post(tap: .cghidEventTap)
+            // Keep mouse-up in its original coordinates so the normal handler
+            // translates it and finishes cursor/preview cleanup exactly once.
+            mouseUp?.post(tap: .cghidEventTap)
+        }
     }
 
     private func finishNativeResize(with event: CGEvent) -> Unmanaged<CGEvent>? {
@@ -592,6 +633,9 @@ private final class NativeDragState {
     private var usesWarpedPointer = false
     private var usesWarpedEventCoordinates = false
     var needsPointerWarp = true
+    var delaysInitialDrag = false
+    var pendingInitialDrag: CGEvent?
+    var pendingInitialMouseUp: CGEvent?
 
     var isMove: Bool {
         target == .move
@@ -1054,6 +1098,8 @@ private func hasOnlyControlKey(_ flags: CGEventFlags) -> Bool {
     let keyMask: CGEventFlags = [.maskControl, .maskCommand, .maskAlternate, .maskShift, .maskSecondaryFn]
     return flags.intersection(keyMask) == .maskControl
 }
+
+private let delayedIdeaDragMarker: Int64 = 0x4352_5749
 
 func prepareNativeMouseDown(
     _ event: CGEvent,
