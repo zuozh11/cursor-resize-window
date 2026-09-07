@@ -113,6 +113,7 @@ public final class WindowResizeApp: NSObject, NSApplicationDelegate, @unchecked 
     fileprivate func handle(_ type: CGEventType, event: CGEvent, proxy: CGEventTapProxy) -> Unmanaged<CGEvent>? {
         if type == .leftMouseDragged,
            event.getIntegerValueField(.eventSourceUserData) == delayedMoveDragMarker {
+            updateNativeDragFeedback(at: event.location)
             return Unmanaged.passUnretained(event)
         }
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
@@ -320,11 +321,9 @@ public final class WindowResizeApp: NSObject, NSApplicationDelegate, @unchecked 
         } else {
             event.location = nativeDragState.translate(event.location)
         }
-        let previewFrame = nativeDragState.updatePreviewFrame(for: event.location)
         if isShadowCursorActive {
             updateShadowCursor(at: nativeDragState.visiblePointer(for: event.location))
         }
-        updateDragFeedback(at: event.location, windowFrame: previewFrame)
         if nativeDragState.isMove,
            isFirstDrag || nativeDragState.pendingInitialDrag != nil {
             nativeDragState.pendingInitialDrag = event.copy()
@@ -333,7 +332,14 @@ public final class WindowResizeApp: NSObject, NSApplicationDelegate, @unchecked 
             }
             return nil
         }
+        updateNativeDragFeedback(at: event.location)
         return Unmanaged.passUnretained(event)
+    }
+
+    private func updateNativeDragFeedback(at point: CGPoint) {
+        guard let nativeDragState else { return }
+        let previewFrame = nativeDragState.updatePreviewFrame(for: point)
+        updateDragFeedback(at: point, windowFrame: previewFrame)
     }
 
     private func scheduleInitialMoveDrag(for state: NativeDragState) {
