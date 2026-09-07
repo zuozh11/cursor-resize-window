@@ -63,7 +63,7 @@ final class ResizeModelTests: XCTestCase {
     func testMapsEveryTargetToNativeAnchor() {
         let pointer = CGPoint(x: 250, y: 350)
         let expected: [ResizeTarget: CGPoint] = [
-            .move: CGPoint(x: 250, y: 206),
+            .move: CGPoint(x: 250, y: 203),
             .left: CGPoint(x: 102, y: 350),
             .right: CGPoint(x: 398, y: 350),
             .top: CGPoint(x: 250, y: 202),
@@ -118,27 +118,21 @@ final class ResizeModelTests: XCTestCase {
     func testTranslatesNativeMoveEventsOnBothAxes() {
         let mapping = NativeDragMapping(pointer: CGPoint(x: 250, y: 350), frame: frame, target: .move)
 
-        XCTAssertEqual(mapping.translate(CGPoint(x: 270, y: 380)), CGPoint(x: 270, y: 236))
+        XCTAssertEqual(mapping.translate(CGPoint(x: 270, y: 380)), CGPoint(x: 270, y: 233))
     }
 
-    func testUsesOriginalPointerXAndSixPointInsetForNativeMoveAnchor() {
+    func testUsesOriginalPointerXAndThreePointInsetForNativeMoveAnchor() {
         let mapping = NativeDragMapping(pointer: CGPoint(x: 150, y: 350), frame: frame, target: .move)
 
-        XCTAssertEqual(mapping.anchor, CGPoint(x: 150, y: 206))
+        XCTAssertEqual(mapping.anchor, CGPoint(x: 150, y: 203))
         XCTAssertEqual(mapping.visiblePointer(for: mapping.anchor), CGPoint(x: 150, y: 350))
     }
 
     func testKeepsVisiblePointerAtOriginalOffsetFromNativeMoveAnchor() {
-        let mapping = NativeDragMapping(
-            pointer: CGPoint(x: 250, y: 350),
-            frame: frame,
-            target: .move,
-            moveAnchorX: 150
-        )
+        let mapping = NativeDragMapping(pointer: CGPoint(x: 250, y: 350), frame: frame, target: .move)
 
         XCTAssertEqual(mapping.visiblePointer(for: mapping.anchor), CGPoint(x: 250, y: 350))
-        XCTAssertEqual(mapping.translate(CGPoint(x: 270, y: 380)), CGPoint(x: 170, y: 236))
-        XCTAssertEqual(mapping.visiblePointer(for: CGPoint(x: 170, y: 236)), CGPoint(x: 270, y: 380))
+        XCTAssertEqual(mapping.visiblePointer(for: CGPoint(x: 270, y: 233)), CGPoint(x: 270, y: 380))
     }
 
     func testDistinguishesPreWarpAndPostWarpEventCoordinates() {
@@ -240,7 +234,7 @@ final class ResizeModelTests: XCTestCase {
 
         XCTAssertEqual(
             mapping.translate(CGPoint(x: 10, y: 166), constrainedToAny: [display]),
-            CGPoint(x: 10, y: 22)
+            CGPoint(x: 10, y: 19)
         )
     }
 
@@ -257,7 +251,7 @@ final class ResizeModelTests: XCTestCase {
 
         XCTAssertEqual(
             mapping.translate(CGPoint(x: 2100, y: 350), constrainedToAny: displays),
-            CGPoint(x: 2000, y: 206)
+            CGPoint(x: 2000, y: 203)
         )
     }
 

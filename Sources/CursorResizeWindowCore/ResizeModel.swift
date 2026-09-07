@@ -106,7 +106,7 @@ enum ResizeModel {
 }
 
 struct NativeDragMapping: Equatable {
-    static let defaultTitleBarYOffset: CGFloat = 6
+    static let defaultTitleBarYOffset: CGFloat = 3
 
     private static let edgeInset: CGFloat = 2
     private static let cornerInset: CGFloat = 5
@@ -122,15 +122,14 @@ struct NativeDragMapping: Equatable {
         pointer: CGPoint,
         frame: CGRect,
         target: ResizeTarget,
-        titleBarYOffset: CGFloat = NativeDragMapping.defaultTitleBarYOffset,
-        moveAnchorX: CGFloat? = nil
+        titleBarYOffset: CGFloat = NativeDragMapping.defaultTitleBarYOffset
     ) {
         self.target = target
         self.pointer = pointer
         moveTopDisplayInset = Self.windowDisplayInset + titleBarYOffset
         switch target {
         case .move:
-            anchor = CGPoint(x: moveAnchorX ?? pointer.x, y: frame.minY + titleBarYOffset)
+            anchor = CGPoint(x: pointer.x, y: frame.minY + titleBarYOffset)
         case .left:
             anchor = CGPoint(x: frame.minX + Self.edgeInset, y: pointer.y)
         case .right:
