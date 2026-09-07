@@ -181,7 +181,8 @@ public final class WindowResizeApp: NSObject, NSApplicationDelegate, @unchecked 
             target: target,
             titleBarYOffset: target == .move
                 ? titleBarYOffset(for: window)
-                : NativeDragMapping.defaultTitleBarYOffset
+                : NativeDragMapping.defaultTitleBarYOffset,
+            moveAnchor: target == .move ? trafficLightAnchor(for: window) : nil
         )
         if let displayBounds = nativeMapping.clickableDisplay(in: activeDisplayBounds()) {
             nativeDragState = NativeDragState(
@@ -205,6 +206,19 @@ public final class WindowResizeApp: NSObject, NSApplicationDelegate, @unchecked 
             return false
         }
         return true
+    }
+
+    private func trafficLightAnchor(for window: AXUIElement) -> CGPoint? {
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(window, kAXZoomButtonAttribute as CFString, &value) == .success,
+              let value,
+              CFGetTypeID(value) == AXUIElementGetTypeID(),
+              let buttonFrame = frame(of: value as! AXUIElement),
+              buttonFrame.width > 0, buttonFrame.height > 0
+        else {
+            return nil
+        }
+        return CGPoint(x: buttonFrame.maxX + 8, y: buttonFrame.midY)
     }
 
     private func titleBarYOffset(for window: AXUIElement) -> CGFloat {

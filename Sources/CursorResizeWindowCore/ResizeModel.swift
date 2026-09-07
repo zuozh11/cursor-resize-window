@@ -122,14 +122,15 @@ struct NativeDragMapping: Equatable {
         pointer: CGPoint,
         frame: CGRect,
         target: ResizeTarget,
-        titleBarYOffset: CGFloat = NativeDragMapping.defaultTitleBarYOffset
+        titleBarYOffset: CGFloat = NativeDragMapping.defaultTitleBarYOffset,
+        moveAnchor: CGPoint? = nil
     ) {
         self.target = target
         self.pointer = pointer
-        moveTopDisplayInset = Self.windowDisplayInset + titleBarYOffset
+        moveTopDisplayInset = Self.windowDisplayInset + (moveAnchor.map { $0.y - frame.minY } ?? titleBarYOffset)
         switch target {
         case .move:
-            anchor = CGPoint(x: pointer.x, y: frame.minY + titleBarYOffset)
+            anchor = moveAnchor ?? CGPoint(x: pointer.x, y: frame.minY + titleBarYOffset)
         case .left:
             anchor = CGPoint(x: frame.minX + Self.edgeInset, y: pointer.y)
         case .right:
