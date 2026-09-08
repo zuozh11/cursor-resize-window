@@ -378,7 +378,10 @@ public final class WindowResizeApp: NSObject, NSApplicationDelegate, @unchecked 
         if isShadowCursorActive {
             let visiblePointer = nativeDragState.visiblePointer(for: event.location)
             updateShadowCursor(at: visiblePointer)
-            finishShadowCursor(afterMouseUpAt: visiblePointer)
+            finishShadowCursor(
+                afterMouseUpAt: visiblePointer,
+                restoreDelay: nativeDragState.isMove ? .milliseconds(20) : nil
+            )
         }
         return Unmanaged.passUnretained(event)
     }
@@ -446,12 +449,15 @@ public final class WindowResizeApp: NSObject, NSApplicationDelegate, @unchecked 
         }
     }
 
-    private func finishShadowCursor(afterMouseUpAt point: CGPoint) {
+    private func finishShadowCursor(
+        afterMouseUpAt point: CGPoint,
+        restoreDelay: DispatchTimeInterval?
+    ) {
         guard let shadowCursorController else {
             return
         }
         MainActor.assumeIsolated {
-            shadowCursorController.finishAfterMouseUp(at: point)
+            shadowCursorController.finishAfterMouseUp(at: point, restoreDelay: restoreDelay)
         }
     }
 
@@ -817,9 +823,15 @@ private final class ShadowCursorController {
         overlay.showShadowCursor(at: point, image: session.image, hotSpot: session.hotSpot)
     }
 
-    func finishAfterMouseUp(at point: CGPoint) {
+    func finishAfterMouseUp(at point: CGPoint, restoreDelay: DispatchTimeInterval?) {
         update(at: point)
         guard let session else {
+            return
+        }
+        if let restoreDelay {
+            DispatchQueue.main.asyncAfter(deadline: .now() + restoreDelay) { [weak self] in
+                self?.restore(sessionID: session.id)
+            }
             return
         }
         DispatchQueue.main.async { [weak self] in

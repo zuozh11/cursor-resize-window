@@ -262,7 +262,7 @@ final class ResizeModelTests: XCTestCase {
         )
     }
 
-    func testKeepsNativeMoveWindowEdgeEightPointsBelowScreenTop() {
+    func testAllowsNativeMoveEventsToReachScreenTop() {
         let display = CGRect(x: 0, y: 0, width: 1000, height: 800)
         for titleBarYOffset in [CGFloat(0), 3, 6, 15] {
             let mapping = NativeDragMapping(
@@ -273,10 +273,10 @@ final class ResizeModelTests: XCTestCase {
             )
 
             let translated = mapping.translate(
-                CGPoint(x: 250, y: 150),
+                CGPoint(x: 250, y: 100),
                 constrainedToAny: [display]
             )
-            XCTAssertEqual(translated.y - titleBarYOffset, 8)
+            XCTAssertEqual(translated.y, 0)
         }
     }
 
