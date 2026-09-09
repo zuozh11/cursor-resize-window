@@ -19,14 +19,14 @@ Homebrew rebuilds the binary on every upgrade, and the build is ad-hoc signed, s
 scripts/create-signing-certificate.sh
 ```
 
-The Homebrew service signs the binary with that identity on startup whenever the certificate exists in your login keychain, and skips signing when the installed binary already carries it. The signing runs outside Homebrew's build sandbox, which cannot read the keychain. After installing a signed build, approve `cursor-resize-window` in System Settings > Privacy & Security > Accessibility once; later upgrades rebuild the binary but keep the same signing identity, so the approval persists. Without the certificate, installs stay ad-hoc signed and each upgrade needs a new approval.
+The Homebrew service runs the binary from a stable path (`~/Library/Application Support/cursor-resize-window/cursor-resize-window`). On startup it copies the installed binary there and signs it with that identity whenever the installed binary changes; the signing runs outside Homebrew's build sandbox, which cannot read the keychain. macOS ties Accessibility approval to the binary's location, so the stable path together with the stable signing identity lets the approval survive upgrades: approve `cursor-resize-window` in System Settings > Privacy & Security > Accessibility once, and later upgrades replace the file at that path with a newly signed build. Without the certificate the copy stays ad-hoc signed and each upgrade needs a new approval.
 
 Stale entries left behind by older ad-hoc installs can be removed from the Accessibility list.
 
-Foreground runs bypass the service wrapper. If you run the binary directly instead of through the service, sign it after each upgrade:
+To run the utility in the foreground, use the same wrapper so the stable signed copy is used:
 
 ```sh
-codesign --force --sign cursor-resize-window-signing --identifier com.zuozh11.cursor-resize-window "$(brew --prefix cursor-resize-window)/bin/cursor-resize-window"
+/opt/homebrew/opt/cursor-resize-window/libexec/run-service.sh
 ```
 
 ## Usage
