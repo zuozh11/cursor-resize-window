@@ -11,6 +11,24 @@ brew install cursor-resize-window
 
 The app uses macOS Accessibility APIs and a global event tap. On first run, approve your terminal or Homebrew service host in System Settings > Privacy & Security > Accessibility. If the event tap cannot be created, also check Input Monitoring permissions.
 
+## Keeping Accessibility Permission Across Upgrades
+
+Homebrew rebuilds the binary on every upgrade, and the build is ad-hoc signed, so its code hash changes and macOS treats each build as a new app, asking for Accessibility approval again. To avoid that, create a self-signed code-signing certificate named `cursor-resize-window-signing` once:
+
+```sh
+scripts/create-signing-certificate.sh
+```
+
+The Homebrew service signs the binary with that identity on startup whenever the certificate exists in your login keychain, and skips signing when the installed binary already carries it. The signing runs outside Homebrew's build sandbox, which cannot read the keychain. After installing a signed build, approve `cursor-resize-window` in System Settings > Privacy & Security > Accessibility once; later upgrades rebuild the binary but keep the same signing identity, so the approval persists. Without the certificate, installs stay ad-hoc signed and each upgrade needs a new approval.
+
+Stale entries left behind by older ad-hoc installs can be removed from the Accessibility list.
+
+Foreground runs bypass the service wrapper. If you run the binary directly instead of through the service, sign it after each upgrade:
+
+```sh
+codesign --force --sign cursor-resize-window-signing --identifier com.zuozh11.cursor-resize-window "$(brew --prefix cursor-resize-window)/bin/cursor-resize-window"
+```
+
 ## Usage
 
 Run in the foreground:

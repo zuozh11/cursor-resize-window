@@ -10,10 +10,12 @@ class CursorResizeWindow < Formula
   def install
     system "swift", "build", "--configuration", "release", "--disable-sandbox"
     bin.install ".build/release/cursor-resize-window"
+    libexec.install "scripts/run-service.sh"
+    chmod 0755, libexec/"run-service.sh"
   end
 
   service do
-    run [opt_bin/"cursor-resize-window"]
+    run [libexec/"run-service.sh"]
     keep_alive true
     log_path var/"log/cursor-resize-window.log"
     error_log_path var/"log/cursor-resize-window.log"
@@ -21,5 +23,6 @@ class CursorResizeWindow < Formula
 
   test do
     assert_predicate bin/"cursor-resize-window", :executable?
+    assert_predicate libexec/"run-service.sh", :executable?
   end
 end
