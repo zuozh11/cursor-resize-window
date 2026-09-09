@@ -229,7 +229,7 @@ public final class WindowResizeApp: NSObject, NSApplicationDelegate, @unchecked 
         else {
             return nil
         }
-        return CGPoint(x: buttonFrame.maxX + 8, y: buttonFrame.midY)
+        return CGPoint(x: buttonFrame.maxX + 3, y: buttonFrame.midY)
     }
 
     private func titleBarYOffset(for window: AXUIElement) -> CGFloat {

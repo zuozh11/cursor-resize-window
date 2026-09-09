@@ -33,7 +33,7 @@ Center dragging waits 20 ms after the simulated mouse-down before sending the fi
 
 ## Per-app Title-bar Offset
 
-Center movement starts the native drag 8 points to the right of the green window button, aligned vertically with its center. The button position comes from Accessibility's window zoom-button attribute. The red dot shows the selected target; this point is not guaranteed to be draggable in every app.
+Center movement starts the native drag 3 points to the right of the green window button, aligned vertically with its center. The button position comes from Accessibility's window zoom-button attribute. The red dot shows the selected target; this point is not guaranteed to be draggable in every app.
 
 When the green button position is unavailable, movement uses the original mouse-down X coordinate and a default offset of 3 points below the window's top edge. Per-app title-bar offsets configure this fallback only.
 
