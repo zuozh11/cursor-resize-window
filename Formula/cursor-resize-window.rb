@@ -1,8 +1,8 @@
 class CursorResizeWindow < Formula
   desc "Resize macOS windows with ctrl-left-drag"
   homepage "https://github.com/zuozh11/cursor-resize-window"
-  url "https://github.com/zuozh11/cursor-resize-window/archive/refs/tags/v0.1.21.tar.gz"
-  sha256 "a45b56e5b9fd544c43175d687ff63e8eba85bcc7eb95b76e81bcaba50ef07eff"
+  url "https://github.com/zuozh11/cursor-resize-window/archive/refs/tags/v0.1.22.tar.gz"
+  sha256 "b3ec6d3df007efb35b58fdf3cdaba282b2d9dd2e479bbdacc63de1a3e6a63923"
   license "MIT"
 
   depends_on xcode: ["15.0", :build]
