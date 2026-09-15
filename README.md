@@ -51,9 +51,9 @@ Center dragging waits 20 ms after the simulated mouse-down before sending the fi
 
 ## Per-app Title-bar Offset
 
-Center movement starts the native drag 3 points to the right of the green window button, aligned vertically with its center. The button position comes from Accessibility's window zoom-button attribute. The red dot shows the selected target; this point is not guaranteed to be draggable in every app.
+Center movement starts the native drag at the midpoint of the gap between the yellow and green window buttons, vertically centered within their shared height. Button positions come from Accessibility's window minimize-button and zoom-button attributes. The red dot shows the selected target; this point is not guaranteed to be draggable in every app.
 
-When the green button position is unavailable, movement uses the original mouse-down X coordinate and a default offset of 3 points below the window's top edge. Per-app title-bar offsets configure this fallback only.
+When either button position is unavailable or there is no valid gap between them, movement uses the original mouse-down X coordinate and a default offset of 3 points below the window's top edge. Per-app title-bar offsets configure this fallback only.
 
 Set an override using the app's bundle identifier. For example, to try a 2-point offset for Chrome:
 
@@ -62,7 +62,7 @@ defaults write com.zuozhi.cursor-resize-window TitleBarYOffsets -dict-add com.go
 brew services restart zuozh11/tap/cursor-resize-window
 ```
 
-Run the same command with another bundle identifier to add an app without replacing existing overrides. Offsets are in macOS points (pt), limited to 0–15. Apps without a numeric override use 3 pt. Settings load when the utility starts; restart a foreground instance after changing them as well. Overrides affect only center movement when the green button position is unavailable.
+Run the same command with another bundle identifier to add an app without replacing existing overrides. Offsets are in macOS points (pt), limited to 0–15. Apps without a numeric override use 3 pt. Settings load when the utility starts; restart a foreground instance after changing them as well. Overrides affect only center movement when the button gap cannot be determined.
 
 To clear all overrides and return to the 3-point default:
 

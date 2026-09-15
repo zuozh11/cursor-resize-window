@@ -220,16 +220,33 @@ public final class WindowResizeApp: NSObject, NSApplicationDelegate, @unchecked 
     }
 
     private func trafficLightAnchor(for window: AXUIElement) -> CGPoint? {
-        var value: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(window, kAXZoomButtonAttribute as CFString, &value) == .success,
-              let value,
-              CFGetTypeID(value) == AXUIElementGetTypeID(),
-              let buttonFrame = frame(of: value as! AXUIElement),
-              buttonFrame.width > 0, buttonFrame.height > 0
+        func buttonFrame(for attribute: String) -> CGRect? {
+            var value: CFTypeRef?
+            guard AXUIElementCopyAttributeValue(window, attribute as CFString, &value) == .success,
+                  let value,
+                  CFGetTypeID(value) == AXUIElementGetTypeID(),
+                  let buttonFrame = frame(of: value as! AXUIElement),
+                  buttonFrame.width > 0, buttonFrame.height > 0
+            else {
+                return nil
+            }
+            return buttonFrame
+        }
+
+        guard let yellowFrame = buttonFrame(for: kAXMinimizeButtonAttribute),
+              let greenFrame = buttonFrame(for: kAXZoomButtonAttribute),
+              yellowFrame.maxX < greenFrame.minX
         else {
             return nil
         }
-        return CGPoint(x: buttonFrame.maxX + 3, y: buttonFrame.midY)
+        let gapTop = max(yellowFrame.minY, greenFrame.minY)
+        let gapBottom = min(yellowFrame.maxY, greenFrame.maxY)
+        guard gapTop < gapBottom else { return nil }
+
+        return CGPoint(
+            x: yellowFrame.maxX + (greenFrame.minX - yellowFrame.maxX) / 2,
+            y: gapTop + (gapBottom - gapTop) / 2
+        )
     }
 
     private func titleBarYOffset(for window: AXUIElement) -> CGFloat {
