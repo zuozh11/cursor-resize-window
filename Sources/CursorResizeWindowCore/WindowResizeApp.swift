@@ -815,6 +815,15 @@ private final class ShadowCursorController {
             backgroundCursorAccess.disable()
             return false
         }
+        // NSCursor images do not include the Accessibility pointer-size multiplier.
+        // Read each gesture so settings changes take effect without restarting.
+        let preferences = UserDefaults.standard.persistentDomain(forName: "com.apple.universalaccess")
+        let scale = (preferences?["mouseDriverCursorSize"] as? NSNumber)?.doubleValue ?? 1
+        let appearance = ShadowCursorAppearance(
+            image: cursor.image,
+            hotSpot: cursor.hotSpot,
+            scale: CGFloat(scale)
+        )
         guard CGDisplayHideCursor(CGMainDisplayID()) == .success else {
             backgroundCursorAccess.disable()
             return false
@@ -823,11 +832,11 @@ private final class ShadowCursorController {
         nextSessionID &+= 1
         session = Session(
             id: nextSessionID,
-            image: cursor.image,
-            hotSpot: cursor.hotSpot,
+            image: appearance.image,
+            hotSpot: appearance.hotSpot,
             visiblePoint: point
         )
-        overlay.showShadowCursor(at: point, image: cursor.image, hotSpot: cursor.hotSpot)
+        overlay.showShadowCursor(at: point, image: appearance.image, hotSpot: appearance.hotSpot)
         return true
     }
 

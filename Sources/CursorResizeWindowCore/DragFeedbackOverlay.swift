@@ -1,5 +1,18 @@
 import AppKit
 
+struct ShadowCursorAppearance {
+    let image: NSImage
+    let hotSpot: CGPoint
+
+    init(image: NSImage, hotSpot: CGPoint, scale: CGFloat) {
+        let scale = scale.isFinite && scale >= 1 ? scale : 1
+        // Copy before resizing: NSCursor owns the original, potentially shared image.
+        self.image = image.copy() as! NSImage
+        self.image.size = NSSize(width: image.size.width * scale, height: image.size.height * scale)
+        self.hotSpot = CGPoint(x: hotSpot.x * scale, y: hotSpot.y * scale)
+    }
+}
+
 @MainActor
 final class DragFeedbackOverlay {
     private static let dotSize: CGFloat = 12
